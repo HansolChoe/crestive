@@ -36,6 +36,11 @@ int main(int argc, char* argv[]) {
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
 
   crest::Search* strategy;
+  system("rm -r inputs");
+  system("cp -r seeds inputs");
+  system("rm -r se");
+  system("mkdir se");
+
   if (search_type == "-random") {
     strategy = new crest::RandomSearch(prog, num_iters);
   } else if (search_type == "-random_input") {
@@ -47,6 +52,7 @@ int main(int argc, char* argv[]) {
       strategy = new crest::BoundedDepthFirstSearch(prog, num_iters, atoi(argv[4]));
     }
   } else if (search_type == "-cfg") {
+    fprintf(stderr,"Run cfg\n");
     strategy = new crest::CfgHeuristicSearch(prog, num_iters);
   } else if (search_type == "-cfg_baseline") {
     strategy = new crest::CfgBaselineSearch(prog, num_iters);
@@ -68,5 +74,3 @@ int main(int argc, char* argv[]) {
   delete strategy;
   return 0;
 }
-
-

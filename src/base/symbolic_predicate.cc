@@ -15,6 +15,20 @@ namespace crest {
 SymbolicPred::SymbolicPred()
   : op_(ops::EQ), expr_(new SymbolicExpr(0)) { }
 
+// Redefine copy constructor for deep copying
+SymbolicPred::SymbolicPred(const SymbolicPred& sp) {
+  op_ = sp.op();
+  expr_ = new SymbolicExpr(sp.expr());
+}
+
+SymbolicPred& SymbolicPred::operator=(const SymbolicPred& sp) {
+  if(this == &sp) {
+    return *this;
+  }
+  op_ = sp.op();
+  *expr_ = sp.expr();
+}
+
 SymbolicPred::SymbolicPred(compare_op_t op, SymbolicExpr* expr)
   : op_(op), expr_(expr) { }
 

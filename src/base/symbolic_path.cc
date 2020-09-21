@@ -14,6 +14,31 @@ namespace crest {
 
 SymbolicPath::SymbolicPath() { }
 
+//redifine copy constructor for deep copying
+SymbolicPath::SymbolicPath(const SymbolicPath& sp) {
+  branches_ = sp.branches_;
+  constraints_idx_ = sp.constraints_idx_;
+  constraints_ = vector<SymbolicPred*>(sp.constraints().size());
+  for(size_t i = 0 ; i < sp.constraints().size(); i++) {
+    constraints_[i] = new SymbolicPred(*sp.constraints()[i]);
+  }
+}
+
+//redifine copy constructor for deep copying
+SymbolicPath& SymbolicPath::operator=(const SymbolicPath& sp) {
+  if(this== &sp) {
+    return *this;
+  }
+  branches_ = sp.branches_;
+  constraints_idx_ = sp.constraints_idx_;
+  constraints_ = sp.constraints();
+  constraints_ = vector<SymbolicPred*>(sp.constraints().size());
+  for(size_t i = 0 ; i < sp.constraints().size(); i++) {
+    constraints_[i] = new SymbolicPred(*sp.constraints()[i]);
+  }
+}
+
+
 SymbolicPath::SymbolicPath(bool pre_allocate) {
   if (pre_allocate) {
     // To cut down on re-allocation.

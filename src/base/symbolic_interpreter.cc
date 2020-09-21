@@ -317,9 +317,12 @@ value_t SymbolicInterpreter::NewInput(type_t type, addr_t addr) {
   if (num_inputs_ < ex_.inputs().size()) {
     ret = ex_.inputs()[num_inputs_];
   } else {
-    // Generate a new random input.
-    // TODO: User a better pseudorandom number generator.
-    ret = CastTo(rand(), type);
+    // Generate a random/specific input.
+//    if(__crest_is_random_input) {
+//      ret = CastTo(rand(), type);
+//    } else {
+      ret = CastTo(*(value_t *)addr , type);
+//    }
     ex_.mutable_inputs()->push_back(ret);
   }
 

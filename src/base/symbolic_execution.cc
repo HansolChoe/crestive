@@ -16,10 +16,28 @@ namespace crest {
 
 SymbolicExecution::SymbolicExecution() { }
 
+SymbolicExecution::SymbolicExecution(const SymbolicExecution& se)
+{
+  vars_ = se.vars();
+  inputs_ = se.inputs();
+  path_ = se.path();
+}
+
+SymbolicExecution& SymbolicExecution::operator=(const SymbolicExecution& rhs) {
+  if (this == &rhs) {
+    return *this;
+  }
+  vars_ = rhs.vars();
+  inputs_ = rhs.inputs();
+  path_ = rhs.path();
+}
+
 SymbolicExecution::SymbolicExecution(bool pre_allocate)
   : path_(pre_allocate) { }
 
-SymbolicExecution::~SymbolicExecution() { }
+SymbolicExecution::~SymbolicExecution() {
+// fprintf(stderr, "SE distructur called\n");
+ }
 
 void SymbolicExecution::Swap(SymbolicExecution& se) {
   vars_.swap(se.vars_);

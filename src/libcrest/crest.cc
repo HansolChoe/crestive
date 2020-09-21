@@ -14,6 +14,8 @@
 #include <sys/time.h>
 #include <vector>
 
+#include <stdlib.h>
+
 #include "base/symbolic_interpreter.h"
 #include "libcrest/crest.h"
 
@@ -46,8 +48,9 @@ static const int kOpTable[] =
   };
 
 
-static void __CrestAtExit();
+string __crest_input_file_name;
 
+static void __CrestAtExit();
 
 void __CrestInit() {
   // Initialize the random number generator.
@@ -55,6 +58,8 @@ void __CrestInit() {
   gettimeofday(&tv, NULL);
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
 
+
+  /*
   // Read the input.
   vector<value_t> input;
   std::ifstream in("input");
@@ -62,6 +67,24 @@ void __CrestInit() {
   while (in >> val) {
     input.push_back(val);
   }
+  in.close();
+  */
+  __crest_input_file_name = std::string(getenv("CREST_INPUT_FILE_NAME")).c_str();
+  if(__crest_input_file_name.empty()) {
+     fprintf(stderr, "libcrest: An input file is not specified\n");
+     exit(1);
+  }
+
+  // fprintf(stderr, "libcrest: inputs/%s\n", __crest_input_file_name.c_str());
+  vector<value_t> input;
+  std::ifstream in(((std::string("inputs/") + __crest_input_file_name)).c_str());
+  value_t val;
+//  fprintf(stderr, "Inputs:");
+  while (in >> val) {
+//    fprintf(stderr, "%d", val);
+    input.push_back(val);
+  }
+//  fprintf(stderr, "\n");
   in.close();
 
   SI = new SymbolicInterpreter(input);
@@ -79,7 +102,10 @@ void __CrestAtExit() {
   string buff;
   buff.reserve(1<<26);
   ex.Serialize(&buff);
-  std::ofstream out("szd_execution", std::ios::out | std::ios::binary);
+  std::string szd_execution_name = std::string("se/ex_") + __crest_input_file_name;
+  // std::ofstream out("szd_execution", std::ios::out | std::ios::binary);
+  // printf("write %s\n", szd_execution_name.c_str());
+  std::ofstream out(szd_execution_name, std::ios::out | std::ios::binary);
   out.write(buff.data(), buff.size());
   assert(!out.fail());
   out.close();

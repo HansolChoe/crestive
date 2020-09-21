@@ -28,6 +28,8 @@ namespace crest {
 class SymbolicPred {
  public:
   SymbolicPred();
+  SymbolicPred(const SymbolicPred& sp);
+  SymbolicPred& operator=(const SymbolicPred& sp);
   SymbolicPred(compare_op_t op, SymbolicExpr* expr);
   ~SymbolicPred();
 
@@ -58,4 +60,3 @@ class SymbolicPred {
 }  // namespace crest
 
 #endif  // BASE_SYMBOLIC_PREDICATE_H__
-

@@ -27,6 +27,7 @@ using std::map;
 using std::vector;
 using __gnu_cxx::hash_map;
 
+
 namespace crest {
 
 class SymbolicInterpreter {

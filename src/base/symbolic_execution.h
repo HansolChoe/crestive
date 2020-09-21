@@ -29,6 +29,8 @@ namespace crest {
 class SymbolicExecution {
  public:
   SymbolicExecution();
+  SymbolicExecution(const SymbolicExecution& se);
+  SymbolicExecution& operator=(const SymbolicExecution& rhs);
   explicit SymbolicExecution(bool pre_allocate);
   ~SymbolicExecution();
 
@@ -48,7 +50,7 @@ class SymbolicExecution {
  private:
   map<var_t,type_t>  vars_;
   vector<value_t> inputs_;
-  SymbolicPath path_;  
+  SymbolicPath path_;
 };
 
 }  // namespace crest

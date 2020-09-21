@@ -29,10 +29,14 @@ namespace crest {
 class SymbolicPath {
  public:
   SymbolicPath();
+  SymbolicPath(const SymbolicPath& sp);
+  SymbolicPath& operator=(const SymbolicPath& sp);
+
   SymbolicPath(bool pre_allocate);
   ~SymbolicPath();
 
   void Swap(SymbolicPath& sp);
+
 
   void Push(branch_id_t bid);
   void Push(branch_id_t bid, SymbolicPred* constraint);
