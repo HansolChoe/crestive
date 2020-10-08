@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
             "dfs, cfg, random, uniform_random, random_input \n");
     return 1;
   }
+  char *time_out = "10000000";
 
   string prog = argv[1];
   int num_iters = atoi(argv[2]);
@@ -34,15 +35,21 @@ int main(int argc, char* argv[]) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
+  
 
   crest::Search* strategy;
   system("rm -r inputs");
   system("cp -r seeds inputs");
   system("rm -r se");
   system("mkdir se");
+  system("rm summary1 log1");
+  system("rm -r coverages");
+  system("mkdir coverages");
 
   if (search_type == "-random") {
     strategy = new crest::RandomSearch(prog, num_iters);
+  } else if (search_type == "-es_random") {
+    strategy = new crest::RandomESSearch(prog, num_iters);
   } else if (search_type == "-random_input") {
     strategy = new crest::RandomInputSearch(prog, num_iters);
   } else if (search_type == "-dfs") {
@@ -51,8 +58,9 @@ int main(int argc, char* argv[]) {
     } else {
       strategy = new crest::BoundedDepthFirstSearch(prog, num_iters, atoi(argv[4]));
     }
+  } else if (search_type == "-es_cfg") {
+    strategy = new crest::CfgHeuristicESSearch(prog, num_iters);
   } else if (search_type == "-cfg") {
-    fprintf(stderr,"Run cfg\n");
     strategy = new crest::CfgHeuristicSearch(prog, num_iters);
   } else if (search_type == "-cfg_baseline") {
     strategy = new crest::CfgBaselineSearch(prog, num_iters);

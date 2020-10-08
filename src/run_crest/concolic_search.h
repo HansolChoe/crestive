@@ -17,6 +17,7 @@
 #include <ext/hash_map>
 #include <ext/hash_set>
 #include <time.h>
+#include <chrono>
 
 #include <functional>
 
@@ -82,6 +83,13 @@ class Search {
   unsigned int reachable_branches_;
 
   time_t start_time_;
+  time_t summary_time_;
+  time_t coverage_log_time_;
+  
+  std::chrono::high_resolution_clock::time_point begin_total_;
+  std::chrono::high_resolution_clock::time_point end_total_;
+  std::chrono::duration<double> elapsed_time_total_;
+
 
   typedef vector<branch_id_t>::const_iterator BranchIt;
 
@@ -109,19 +117,23 @@ class Search {
   void UpdateInputFileIdx();
 
 
- private:
-  const string program_;
-  const int max_iters_;
+  void WriteInputToFileOrDie(const string& file, const vector<value_t>& input);
   int num_iters_;
+  void WriteCoverageToFileOrDie(const string& file);
+  void LaunchProgram(const vector<value_t>& inputs);
+  const int max_iters_;
+  const string program_;
+  int num_prediction_fail_;
+ private:
+  int time_out_;
 
   /*
   struct sockaddr_un sock_;
   int sockd_;
   */
 
-  void WriteInputToFileOrDie(const string& file, const vector<value_t>& input);
-  void WriteCoverageToFileOrDie(const string& file);
-  void LaunchProgram(const vector<value_t>& inputs);
+  // void WriteCoverageToFileOrDie(const string& file);
+  // void LaunchProgram(const vector<value_t>& inputs);
 };
 
 
@@ -168,10 +180,10 @@ class RandomInputSearch : public Search {
 };
 
 
-class RandomSearch : public Search {
+class RandomESSearch : public Search {
  public:
-  RandomSearch(const string& program, int max_iterations);
-  virtual ~RandomSearch();
+  RandomESSearch(const string& program, int max_iterations);
+  virtual ~RandomESSearch();
 
   virtual void Run();
 
@@ -252,16 +264,21 @@ class CfgBaselineSearch : public Search {
 
 class SubContext {
 public:
-  SubContext(size_t cur_idx_, int dist_, SymbolicExecution &ex_) {
+  SubContext(size_t cur_idx_, size_t dist_, SymbolicExecution &ex_) {
+    b_idx = 0;
     cur_idx = cur_idx_;
     dist = dist_;
     // execution copy
     cur_ex = ex_;
+    // fprintf(stderr, "b cur_ex size = %u, ex size = %u\n", cur_ex.path().constraints().size(), ex_.path().constraints().size());
   }
   SymbolicExecution cur_ex;
   size_t cur_idx;
+  size_t b_idx;
   vector<size_t> idxs;
-  int dist;
+  size_t dist;
+  set<size_t> seen;
+  set<size_t> seen2;
  };
 
 class Context {
@@ -269,7 +286,7 @@ public:
   Context() {
     is_reset = true;
     cur_idx = 0;
-    is_do_search_failed = false;
+    // is_do_search_failed = false;
     do_search_once_found_new_branch = false;
   }
   vector<ScoredBranch> scoredBranches;
@@ -280,8 +297,103 @@ public:
   stack<SubContext> stack_sub_context;
   int iters;
   bool do_search_once_found_new_branch;
-  bool is_do_search_failed;
+  // bool is_do_search_failed;
+  vector<bool> covered;
+  vector<size_t> dist;
+  unsigned int num_covered;
+  set<branch_id_t> new_branches;
  };
+
+class CfgHeuristicESSearch : public Search {
+ public:
+  CfgHeuristicESSearch(const string& program, int max_iterations);
+  virtual ~CfgHeuristicESSearch();
+
+  virtual void Run();
+  bool UpdateCoverage(const SymbolicExecution& ex, Context &context);
+  bool UpdateCoverage(const SymbolicExecution& ex,
+		      set<branch_id_t>* new_branches, Context &context);
+
+
+ private:
+  // vector<SymbolicExecution> v_ex_;
+  vector<Context> v_context_;
+
+  typedef vector<branch_id_t> nbhr_list_t;
+  vector<nbhr_list_t> cfg_;
+  vector<nbhr_list_t> cfg_rev_;
+  vector<size_t> dist_notusing;
+
+  static const size_t kInfiniteDistance = 10000;
+
+  int iters_left_;
+
+  SymbolicExecution success_ex_;
+
+  // Stats.
+  unsigned num_inner_solves_;
+  unsigned num_inner_successes_pred_fail_;
+  unsigned num_inner_lucky_successes_;
+  unsigned num_inner_zero_successes_;
+  unsigned num_inner_nonzero_successes_;
+  unsigned num_inner_recursive_successes_;
+  unsigned num_inner_unsats_;
+  unsigned num_inner_pred_fails_;
+
+  unsigned num_top_solves_;
+  unsigned num_top_solve_successes_;
+
+  unsigned num_solves_;
+  unsigned num_solve_successes_;
+  unsigned num_solve_sat_attempts_;
+  unsigned num_solve_unsats_;
+  unsigned num_solve_recurses_;
+  unsigned num_solve_pred_fails_;
+  unsigned num_solve_all_concrete_;
+  unsigned num_solve_no_paths_;
+
+  // void UpdateBranchDistances();
+  // void UpdateBranchDist ances(vector<size_t>& dist);
+  void UpdateBranchDistances(vector<bool>& covered, vector<long unsigned int>& dist);
+  void PrintStats();
+  // bool DoSearch(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
+  // bool DoSearchOnce(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
+  bool DoSearchOnce(Context& context);
+  bool SolveOnePathAlongCfg(Context& context);
+
+  bool DoBoundedBFS(int i, int depth, const SymbolicExecution& prev_ex);
+  void SkipUntilReturn(const vector<branch_id_t> path, size_t* pos);
+
+  bool FindAlongCfg(size_t i, unsigned int dist,
+		    const SymbolicExecution& ex,
+		    const set<branch_id_t>& bs);
+
+  // bool SolveAlongCfg(size_t i, unsigned int max_dist,
+	// 	     const SymbolicExecution& prev_ex);
+
+  void CollectNextBranches(const vector<branch_id_t>& path,
+			   size_t* pos, vector<size_t>* idxs);
+
+  size_t MinCflDistance(size_t i,
+			const SymbolicExecution& ex,
+			const set<branch_id_t>& bs);
+};
+
+class RandomSearch : public Search {
+ public:
+  RandomSearch(const string& program, int max_iterations);
+  virtual ~RandomSearch();
+
+  virtual void Run();
+
+ private:
+  SymbolicExecution ex_;
+
+  void SolveUncoveredBranches(size_t i, int depth,
+                              const SymbolicExecution& prev_ex);
+
+  bool SolveRandomBranch(vector<value_t>* next_input, size_t* idx);
+};
 
 class CfgHeuristicSearch : public Search {
  public:
@@ -291,9 +403,6 @@ class CfgHeuristicSearch : public Search {
   virtual void Run();
 
  private:
-  // vector<SymbolicExecution> v_ex_;
-  vector<Context> v_context_;
-
   typedef vector<branch_id_t> nbhr_list_t;
   vector<nbhr_list_t> cfg_;
   vector<nbhr_list_t> cfg_rev_;
@@ -329,11 +438,7 @@ class CfgHeuristicSearch : public Search {
 
   void UpdateBranchDistances();
   void PrintStats();
-  // bool DoSearch(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
-  // bool DoSearchOnce(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
-  bool DoSearchOnce(Context& context);
-  bool SolveOnePathAlongCfg(Context& context);
-
+  bool DoSearch(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
   bool DoBoundedBFS(int i, int depth, const SymbolicExecution& prev_ex);
   void SkipUntilReturn(const vector<branch_id_t> path, size_t* pos);
 
@@ -341,8 +446,8 @@ class CfgHeuristicSearch : public Search {
 		    const SymbolicExecution& ex,
 		    const set<branch_id_t>& bs);
 
-  // bool SolveAlongCfg(size_t i, unsigned int max_dist,
-	// 	     const SymbolicExecution& prev_ex);
+  bool SolveAlongCfg(size_t i, unsigned int max_dist,
+		     const SymbolicExecution& prev_ex);
 
   void CollectNextBranches(const vector<branch_id_t>& path,
 			   size_t* pos, vector<size_t>* idxs);
@@ -351,6 +456,7 @@ class CfgHeuristicSearch : public Search {
 			const SymbolicExecution& ex,
 			const set<branch_id_t>& bs);
 };
+
 
 
 }  // namespace crest
