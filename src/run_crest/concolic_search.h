@@ -318,6 +318,7 @@ class CfgHeuristicESSearch : public Search {
  private:
   // vector<SymbolicExecution> v_ex_;
   vector<Context> v_context_;
+  set<branch_id_t> all_new_branches;
 
   typedef vector<branch_id_t> nbhr_list_t;
   vector<nbhr_list_t> cfg_;

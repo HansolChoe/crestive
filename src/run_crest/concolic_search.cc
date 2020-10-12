@@ -212,7 +212,6 @@ void Search::LaunchProgram(const vector<value_t>& inputs) {
   /*
   pid_t pid = fork();
   assert(pid != -1);
-
   if (!pid) {
     system(program_.c_str());
     exit(0);
@@ -1142,6 +1141,7 @@ void CfgHeuristicESSearch::Run() {
         // fprintf(stderr, "not foudn new branch\n");
       }
       // for(int i = 0 ; i < context.cur_ex.path().branches().size(); i++) {
+
         // fprintf(stderr,"b%d: %d\n", i, context.cur_ex.path().branches()[i]);
       // }
       context.iters=30;
@@ -1234,10 +1234,24 @@ void CfgHeuristicESSearch::PrintStats() {
 }
 
 void CfgHeuristicESSearch::UpdateBranchDistances(vector<bool>& covered, vector<long unsigned int>& dist) {
+/*
+  // Update all covered branches
+  all_covered_.assign(max_branch_, false);
+  for ( int i = 0 ; i < input_file_names_.size(); i++) {
+    Context &c = v_context_[input_file_idx_];
+    for (int j = 0 ; j < c.covered.size(); j++) {
+      if(c.covered[j]) {
+        all_covered_[j] = true;
+      }
+    }
+  }
+*/
+
   // We run a BFS backward, starting simultaneously at all uncovered vertices.
   // fprintf(stderr, "covered size: %u, dist size %u", covered.size(), dist.size());
   queue<branch_id_t> Q;
   for (BranchIt i = branches_.begin(); i != branches_.end(); ++i) {
+    // if (!all_covered_[*i]) {
     if (!covered[*i]) {
       dist[*i] = 0;
       Q.push(*i);
@@ -1346,9 +1360,22 @@ bool CfgHeuristicESSearch::DoSearchOnce(Context& context) {
     if (found_new_branch && !prediction_failed) {
       fprintf(stderr, "Found new branch by forcing at distance %zu (%d).\n",
 	      context.dist[bid], context.scoredBranches[context.cur_idx].second);
-      size_t min_dist = MinCflDistance(b_idx, new_ex, context.new_branches);
+/*
+      for(int i = 0 ; i < input_file_names_.size(); i++) {
+        Context &c = v_context_[i];
+        for(set<branch_id_t>::iterator it=c.new_branches.begin(); it!= c.new_branches.end(); it++) {
+          all_new_branches.insert(*it);
+        }
+      }
+      if(context.new_branches.size() != all_new_branches.size()) {
+        fprintf(stderr, "cnew %u, allnew %u\n", context.new_branches.size(), all_new_branches.size());
+      }
+*/
+       size_t min_dist = MinCflDistance(b_idx, new_ex, context.new_branches);
+      //size_t min_dist = MinCflDistance(b_idx, new_ex, all_new_branches);
       // Check if we were lucky.
       if (FindAlongCfg(b_idx, context.dist[bid], new_ex, context.new_branches)) {
+      // if (FindAlongCfg(b_idx, context.dist[bid], new_ex, all_new_branches)) {
         // fprintf(stderr, "FindAlongCfg True\n");
       	assert(min_dist <= context.dist[bid]);
       	// A legitimate find -- return success.
