@@ -38,6 +38,15 @@ SymbolicPath& SymbolicPath::operator=(const SymbolicPath& sp) {
   }
 }
 
+// redifine equals for path comparison
+// only branches that executed is concerned
+// SymbolicPath& SymbolicPath::operator==(const SymbolicPath& lhs, const SymbolicPath& rhs) {
+  // for(size_t i = 0 ; i < sp.constraints().size(); i++) {
+  //   constraints_[i] = new SymbolicPred(*sp.constraints()[i]);
+  // }
+  // return lhs.branches() == rhs.branches();
+// }
+
 
 SymbolicPath::SymbolicPath(bool pre_allocate) {
   if (pre_allocate) {

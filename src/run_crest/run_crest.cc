@@ -35,14 +35,13 @@ int main(int argc, char* argv[]) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
-  
 
   crest::Search* strategy;
   system("rm -r inputs");
   system("cp -r seeds inputs");
   system("rm -r se");
   system("mkdir se");
-  system("rm summary1 log1");
+  system("rm summary* log*");
   system("rm -r coverages");
   system("mkdir coverages");
 
@@ -50,6 +49,8 @@ int main(int argc, char* argv[]) {
     strategy = new crest::RandomSearch(prog, num_iters);
   } else if (search_type == "-es_random") {
     strategy = new crest::RandomESSearch(prog, num_iters);
+  } else if (search_type == "-cs_random") {
+    strategy = new crest::RandomCSSearch(prog, num_iters);
   } else if (search_type == "-random_input") {
     strategy = new crest::RandomInputSearch(prog, num_iters);
   } else if (search_type == "-dfs") {

@@ -31,7 +31,7 @@ class SymbolicPath {
   SymbolicPath();
   SymbolicPath(const SymbolicPath& sp);
   SymbolicPath& operator=(const SymbolicPath& sp);
-
+  // SymbolicPath& operator==(const SymbolicPath& sp);
   SymbolicPath(bool pre_allocate);
   ~SymbolicPath();
 

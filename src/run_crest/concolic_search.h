@@ -13,6 +13,8 @@
 
 #include <map>
 #include <vector>
+// #include <queue>
+#include <deque>
 #include <stack>
 #include <ext/hash_map>
 #include <ext/hash_set>
@@ -35,6 +37,8 @@
 #include <dirent.h>
 
 using std::map;
+// using std::queue;
+using std::deque;
 using std::binary_function;
 using std::vector;
 using std::stack;
@@ -85,7 +89,7 @@ class Search {
   time_t start_time_;
   time_t summary_time_;
   time_t coverage_log_time_;
-  
+
   std::chrono::high_resolution_clock::time_point begin_total_;
   std::chrono::high_resolution_clock::time_point end_total_;
   std::chrono::duration<double> elapsed_time_total_;
@@ -136,6 +140,52 @@ class Search {
   // void LaunchProgram(const vector<value_t>& inputs);
 };
 
+class EXContext {
+public:
+  EXContext(SymbolicExecution _e, set<branch_id_t> _t) {
+    ex = _e;
+    target_branches = _t;
+  }
+  SymbolicExecution ex;
+  set<branch_id_t> target_branches;
+};
+
+// class CSSearch : public Search {
+// public:
+//     CSSearch(const string& program, int max_iterations);
+//     virtual ~CSSearch();
+//
+//   protected:
+//     // virtual size_t AssignEnergy(EXContext &c);
+//
+//
+// };
+
+class RandomCSSearch : public Search {
+ public:
+   RandomCSSearch(const string& program, int max_iterations)
+     : Search(program, max_iterations) { }
+
+  ~RandomCSSearch() {}
+  // virtual ~RandomCSSearch();
+  virtual void Run();
+  // size_t AssignEnergy(EXContext &c);
+  size_t AssignEnergy(EXContext c);
+  // set<branch_id_t> uncovered_branches_;
+protected:
+  map<size_t, size_t> pf_count_;
+  set<branch_id_t> covered_branches_;
+  set<branch_id_t> reachable_branches_set_;
+  bool UpdateCoverage(const SymbolicExecution& ex);
+  bool UpdateCoverage(const SymbolicExecution& ex, set<branch_id_t>* new_branches);
+ private:
+  deque<EXContext> Q;
+  // bool SolveRandomBranch(vector<value_t>* next_input, size_t* idx);
+  bool SolveRandomBranch(SymbolicExecution &ex, vector<value_t>* next_input, size_t* idx);
+};
+
+
+
 
 class BoundedDepthFirstSearch : public Search {
  public:
@@ -152,21 +202,6 @@ class BoundedDepthFirstSearch : public Search {
   void DFS(size_t pos, int depth, SymbolicExecution& prev_ex);
 };
 
-
-/*
-class OldDepthFirstSearch : public Search {
- public:
-  explicit OldDepthFirstSearch(const string& program,
-			       int max_iterations);
-  virtual ~OldDepthFirstSearch();
-
-  virtual void Run();
-
- private:
-
-  void DFS(size_t pos, SymbolicExecution& prev_ex);
-};
-*/
 
 class RandomInputSearch : public Search {
  public:
@@ -196,6 +231,9 @@ class RandomESSearch : public Search {
 
   bool SolveRandomBranch(vector<value_t>* next_input, size_t* idx);
 };
+
+
+
 
 
 class UniformRandomSearch : public Search {
@@ -286,9 +324,10 @@ public:
   Context() {
     is_reset = true;
     cur_idx = 0;
-    // is_do_search_failed = false;
+    is_do_search_failed = false;
     do_search_once_found_new_branch = false;
   }
+  set<branch_id_t> target_branches;
   vector<ScoredBranch> scoredBranches;
   SymbolicExecution cur_ex;
   SymbolicExecution latest_success_ex;
@@ -297,7 +336,7 @@ public:
   stack<SubContext> stack_sub_context;
   int iters;
   bool do_search_once_found_new_branch;
-  // bool is_do_search_failed;
+  bool is_do_search_failed;
   vector<bool> covered;
   vector<size_t> dist;
   unsigned int num_covered;
@@ -317,6 +356,7 @@ class CfgHeuristicESSearch : public Search {
 
  private:
   // vector<SymbolicExecution> v_ex_;
+  void GetTargetBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist, size_t depth, set<branch_id_t> &t);
   vector<Context> v_context_;
   set<branch_id_t> all_new_branches;
 
@@ -404,6 +444,7 @@ class CfgHeuristicSearch : public Search {
   virtual void Run();
 
  private:
+  // void GetTargetBranches(branch_id_t b, vector<bool> &covered, size_t dist, set<branch_id_t> &t);
   typedef vector<branch_id_t> nbhr_list_t;
   vector<nbhr_list_t> cfg_;
   vector<nbhr_list_t> cfg_rev_;
