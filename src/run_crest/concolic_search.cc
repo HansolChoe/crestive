@@ -10,7 +10,9 @@
 
 #include <algorithm>
 #include <assert.h>
+#include <unistd.h>
 #include <cmath>
+#include <iostream>
 #include <fstream>
 #include <limits>
 #include <stdio.h>
@@ -38,6 +40,13 @@ using std::strcmp;
 
 namespace crest {
 
+
+  Runner::Runner(const string& program, int max_iterations)
+  : Search(program, max_iterations) { }
+
+  Runner::~Runner() { }
+  void Runner::Run() { }
+
 ////////////////////////////////////////////////////////////////////////
 //// Search ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -60,7 +69,7 @@ void Search::read_directory(const std::string& name, vector<string>& v) {
 
 
 void Search::UpdateInputFileIdx() {
-    rotation_count_ = (++rotation_count_) % 3;
+    rotation_count_ = (++rotation_count_) % 10;
     if(rotation_count_ == 0) {
       input_file_idx_ = (++input_file_idx_) % input_file_names_.size();
     }
@@ -68,14 +77,99 @@ void Search::UpdateInputFileIdx() {
     fprintf(stderr, "Update Input File Index(%d,%d)\n", input_file_idx_, rotation_count_);
 }
 
+void Search::PrintPathConstraint(const SymbolicPath &sym_path) {
+  string tmp;
+  if (sym_path.constraints().size() == 0) {
+    std::cerr << "(Empty)" << std::endl;
+    return;
+  }
+  for (size_t i = 0; i < sym_path.constraints().size(); i++) {
+    tmp.clear();
+    size_t b_idx = sym_path.constraints_idx()[i];
+    branch_id_t bid = sym_path.branches()[b_idx];
+    sym_path.constraints()[i]->AppendToString(&tmp);
+    std::cerr << i << "("<<bid << "): " << tmp << '\n';
+  }
+}
+
+void Search::RunDirectory(const char *input_directory_name){
+  fprintf(stderr, " RUn DirectorY\n");
+  struct stat buffer;
+  while(true){
+
+    std::string s = std::string(input_directory_name) + "/input" + std::to_string(++num_iters_);
+    if(stat(s.c_str(), &buffer) != 0) {
+      fprintf(stderr, "%s does not exist\n", (std::string(input_directory_name) + "/input" + std::to_string(num_iters_)).c_str());
+      break;
+    }
+
+    auto start = std::chrono::high_resolution_clock::now();
+    setenv("CREST_INPUT_FILE_NAME", s.c_str(), 1);
+    // c << "cp " << input_directory_name << "/input"<<num_iters_ << " input";
+    // system(c.str().c_str());
+    auto end = std::chrono::high_resolution_clock::now();
+    elapsed_time_copy_ += (end - start);
+    fprintf(stderr, "elapsed_time_copy: %.5f\n",elapsed_time_copy_.count() );
+    // fprintf(stderr, " %s\n", c.str().c_str());
+
+
+
+
+    start = std::chrono::high_resolution_clock::now();
+    int ret = system("./grep aaaaaaaaaaa /dev/null");
+    end = std::chrono::high_resolution_clock::now();
+
+    // sleep 0.1 second
+    usleep(10000);
+
+    if (ret == -1 || WEXITSTATUS(ret) != 0) {
+      error_count++;
+    }
+
+
+    fprintf(stderr, "ret = %d\n",WEXITSTATUS(ret));
+    fprintf(stderr, "error_count = %u\n",error_count);
+
+    elapsed_time_program_ += (end - start);
+
+    std::chrono::duration<double> t = end -start;
+    fprintf(stderr, "program time : %lf\n", t.count());
+
+    // ifstream in("szd_execution", ios::in | ios::binary);
+
+    // slepp 0.1 second
+    // usleep(10000);
+    // assert(in && run_ex.Parse(in));
+
+    start = std::chrono::high_resolution_clock::now();
+    ifstream in(("szd_execution"), ios::in | ios::binary);
+    assert(in && run_ex.Parse(in));
+    in.close();
+    end = std::chrono::high_resolution_clock::now();
+    elapsed_time_szd_read_ += (end - start);
+    fprintf(stderr, "elapsed_time_szd_read_: %.5f\n",elapsed_time_szd_read_.count() );
+
+    start = std::chrono::high_resolution_clock::now();
+    UpdateCoverage(run_ex);
+    end = std::chrono::high_resolution_clock::now();
+    elapsed_time_update_ += (end - start);
+    fprintf(stderr, "elapsed_time_update_: %.5f\n",elapsed_time_update_.count() );
+
+    end_total_ = std::chrono::high_resolution_clock::now();
+    elapsed_time_total_ = end_total_ - begin_total_;
+    // fprintf(stderr, "Solving %2.f\n", elapsed_time_solving_);
+
+
+  }
+}
 
 Search::Search(const string& program, int max_iterations)
   : program_(program), max_iters_(max_iterations), num_iters_(0) {
-
+    error_count = 0;
   start_time_ = time(NULL);
   begin_total_ = std::chrono::high_resolution_clock::now();
   summary_time_ = 0;
-  time_out_ = 1500;
+  time_out_ = 600;
 
   { // Read in the set of branches.
     max_branch_ = 0;
@@ -166,7 +260,16 @@ Search::~Search() { }
 
 void Search::WriteInputToFileOrDie(const string& file,
 				   const vector<value_t>& input) {
-  string file_path = std::string("inputs/") + file;
+  // string file_path = std::string("inputs/") + file;
+  string file_path;
+  // FILE* f = fopen(file_path.c_str(), "w");
+  // string file_path = "testcases/" + file;
+  if(is_save_testcases_option_) {
+      file_path = "testcases/input" + std::to_string(num_iters_);
+  } else {
+    file_path = "input";
+  }
+  // FILE* f = fopen("input", "w");
   FILE* f = fopen(file_path.c_str(), "w");
   // fprintf(stderr, "run_crest:write %s.\n", file_path.c_str());
   if (!f) {
@@ -207,9 +310,18 @@ void Search::LaunchProgram(const vector<value_t>& inputs) {
     WriteInputToFileOrDie(input_file_names_[input_file_idx_], inputs);
   }
 
-  // WriteInputToFileOrDie("input", inputs);
-  setenv("CREST_INPUT_FILE_NAME", input_file_names_[input_file_idx_].c_str(), 1);
-  // fprintf(stderr, "env CREST_INPUT_FILE_NAME = %s\n", getenv("CREST_INPUT_FILE_NAME"));
+  string s;
+  if(is_save_testcases_option_) {
+    // std::stringstream s;
+    // s << "cp input inputs/input" << num_iters_;
+    // std::string s = "cp input testcases/input" + std::to_string(num_iters_);
+    // system(s.str().c_str());
+    s = "testcases/input" + std::to_string(num_iters_);
+    fprintf(stderr, "s = %s\n", s.c_str());
+  } else {
+    s = "input";
+  }
+  setenv("CREST_INPUT_FILE_NAME", s.c_str(), 1);
 
   /*
   pid_t pid = fork();
@@ -228,22 +340,22 @@ struct cmp_str
 };
 
 
-  // map<const char *, const char*, cmp_str> program_names = {
-  //   {"input1","./grep aaaaaaaaaaa /dev/null"}, //11
-  //   {"input10","./grep aaaaaaaaaaaa /dev/null"}, // 11
-  //   {"input2","./grep aaaaaaaaaaaa /dev/null"}, // 12
-  //   {"input3","./grep aaaaaaaaaa /dev/null"}, // 10
-  //   {"input4","./grep aaaaaaaaaaaaa /dev/null"}, // 13
-  //   {"input5","./grep aaaaaaaaaa /dev/null"},
-  //   {"input6","./grep aaaaaaaaaaaaaaaaaaaa /dev/null"},
-  //   {"input7","./grep aaaaaaaaaaaaaaaaaaaaaa /dev/null"},
-  //   {"input8","./grep aaaaaaaaaaaaaaaaaaaa /dev/null"},
-  //   {"input9","./grep aaaaaaaaaaaaaa /dev/null"} };
-
   map<const char *, const char*, cmp_str> program_names = {
-    {"input1","./test"},
-    {"input2","./test"}
-  };
+    {"input1","./grep aaaaaaaaaaa /dev/null"}, //11
+    {"input10","./grep aaaaaaaaaaaa /dev/null"}, // 11
+    {"input2","./grep aaaaaaaaaaaa /dev/null"}, // 12
+    {"input3","./grep aaaaaaaaaa /dev/null"}, // 10
+    {"input4","./grep aaaaaaaaaaaaa /dev/null"}, // 13
+    {"input5","./grep aaaaaaaaaa /dev/null"},
+    {"input6","./grep aaaaaaaaaaaaaaaaaaaa /dev/null"},
+    {"input7","./grep aaaaaaaaaaaaaaaaaaaaaa /dev/null"},
+    {"input8","./grep aaaaaaaaaaaaaaaaaaaa /dev/null"},
+    {"input9","./grep aaaaaaaaaaaaaa /dev/null"} };
+
+  // map<const char *, const char*, cmp_str> program_names = {
+  //   {"input1","./test"},
+  //   {"input2","./test"}
+  // };
 
 /*
   const char program_names[][100] = {
@@ -260,7 +372,24 @@ struct cmp_str
      };
 */
 
-  system(program_names[input_file_names_[input_file_idx_].c_str()]);
+   auto start = std::chrono::high_resolution_clock::now();
+   fprintf(stderr, "before system\n");
+   int ret =system(program_names[input_file_names_[input_file_idx_].c_str()]);
+   fprintf(stderr, "after system\n");
+   auto end = std::chrono::high_resolution_clock::now();
+   fprintf(stderr, "%s\n",input_file_names_[input_file_idx_].c_str());
+   fprintf(stderr, "%s\n",program_names[input_file_names_[input_file_idx_].c_str()]);
+   // system(program_.c_str());
+   std::chrono::duration<double> t = end -start;
+   fprintf(stderr, "program time : %lf\n", t.count());
+  elapsed_time_program_ += (end - start);
+  if (ret == -1 || WEXITSTATUS(ret) != 0) {
+    error_count++;
+  }
+  fprintf(stderr, "ret = %d\n",WEXITSTATUS(ret));
+  fprintf(stderr, "error_count = %u\n",error_count);
+
+  // fprintf( stderr , " time program : %.2f\n", elapsed_time_program_.count());
   // system(program_.c_str());
 
 }
@@ -269,6 +398,9 @@ struct cmp_str
 void Search::RunProgram(const vector<value_t>& inputs, SymbolicExecution* ex) {
   end_total_ = std::chrono::high_resolution_clock::now();
   elapsed_time_total_ = end_total_ - begin_total_;
+  // fprintf(stderr, "Solving %2.f\n", elapsed_time_solving_);
+  // fprintf(stderr, "Searching %.2f\n", (elapsed_time_total_.count() - (elapsed_time_solving_.count() + elapsed_time_program_.count())));
+
   // fprintf(stderr, "inputs\n");
   // for(size_t i = 0 ; i < inputs.size(); i++) {
   //   fprintf(stderr, "%d\n", inputs[i]);
@@ -280,7 +412,8 @@ void Search::RunProgram(const vector<value_t>& inputs, SymbolicExecution* ex) {
   // Run the program.
   LaunchProgram(inputs);
 
-  ifstream in(("se/ex_" + input_file_names_[input_file_idx_]), ios::in | ios::binary);
+  // ifstream in(("se/ex_" + input_file_names_[input_file_idx_]), ios::in | ios::binary);
+  ifstream in(("szd_execution"), ios::in | ios::binary);
   assert(in && ex->Parse(in));
   in.close();
 }
@@ -292,7 +425,7 @@ bool Search::UpdateCoverage(const SymbolicExecution& ex) {
 
 bool Search::UpdateCoverage(const SymbolicExecution& ex,
 			    set<branch_id_t>* new_branches) {
-
+  // auto start = std::chrono::high_resolution_clock::now();
   const unsigned int prev_covered_ = num_covered_;
   const vector<branch_id_t>& branches = ex.path().branches();
   for (BranchIt i = branches.begin(); i != branches.end(); ++i) {
@@ -314,8 +447,11 @@ bool Search::UpdateCoverage(const SymbolicExecution& ex,
     }
   }
 
+
   fprintf(stderr, "Iteration %d (%lds): covered %u branches [%u reach funs, %u reach branches].\n",
 	  num_iters_, time(NULL)-start_time_, total_num_covered_, reachable_functions_, reachable_branches_);
+
+  // PrintPathConstraint(ex.path());
 
   bool found_new_branch = (num_covered_ > prev_covered_);
   if (found_new_branch) {
@@ -324,15 +460,57 @@ bool Search::UpdateCoverage(const SymbolicExecution& ex,
 
   end_total_ = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> time_diff = end_total_ - begin_total_;
+  // __crest_input_file_name = std::string(getenv("CREST_INPUT_FILE_NAME")).c_str();
+  fprintf(stderr, "here1\n");
 
+
+  std::ifstream in("time");
+  double tmp;
+  in >> tmp;
+  t1 += tmp;
+  in >> tmp;
+  t2 += tmp;
+  in >> tmp;
+  t3 += tmp;
+  in.close();
+  // t1 += std::stod(std::string(getenv("CREST_TIME_1")));
+  // t2 += std::stod(std::string(getenv("CREST_TIME_2")));
+  // t3 += std::stod(std::string(getenv("CREST_TIME_3")));
+  fprintf(stderr, "here2\n");
   FILE *f = fopen("log1", "a");
   if (!f) {
     fprintf(stderr, "Writing logging, failed to open %s. \n", "log1");
     return found_new_branch;
   }
-  //fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
-    fprintf(f, "%u,%.2lf,%u\n", total_num_covered_,time_diff ,num_prediction_fail_);
 
+  size_t concrete_path_size = 0;
+  for(size_t i  = 0 ; i < ex.path().branches().size();i++) {
+    if(ex.path().branches()[i] > 0) {
+      concrete_path_size++;
+    }
+  }
+
+  //fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
+  struct stat st;
+  stat("szd_execution", &st);
+
+    fprintf(f, "%u,%.2lf,%u,%u,%u,%u,%u,%.2f,%.2f,%.2f,%f,%f,%f\n",
+    total_num_covered_,
+    time_diff,
+    num_prediction_fail_,
+    ex.path().constraints_idx().size(),
+    ex.path().branches().size(),
+    concrete_path_size,
+    st.st_size,
+    elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()),
+   elapsed_time_solving_.count(),
+    elapsed_time_program_.count(),
+    t1,t2,t3
+);
+    // fprintf(ff, "%u,%.2lf,%u,%u,%u,%u,%u,%u,%.2f,%.2f,%2.f\n",
+    //  total_num_covered_, time_diff, num_prediction_fail_, Q.size(), current_target_branch_size,covered_branches_.size(),ex.path().constraints_idx().size(), ex.path().branches().size()
+    //  ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()), elapsed_time_solving_.count(), elapsed_time_program_.count()
+    // );
   fclose(f);
 
   while(summary_time_ <= time_diff.count()) {
@@ -342,20 +520,28 @@ bool Search::UpdateCoverage(const SymbolicExecution& ex,
       return found_new_branch;
     }
     // fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
-    fprintf(ff, "%u,%.2lf,%u\n", total_num_covered_,time_diff,num_prediction_fail_);
+    // fprintf(ff, "%u,%.2lf,%u\n", total_num_covered_,time_diff,num_prediction_fail_);
+    // fprintf(ff, "%u,%.2lf,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,ex.path().constraints_idx().size());
+    // fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,ex.path().constraints_idx().size(),ex.path().branches().size());
+    fprintf(ff, "%u,%.2lf,%u,%u,%u,%.2f,%.2f,%.2f\n", total_num_covered_,time_diff ,num_prediction_fail_,ex.path().constraints_idx().size(),ex.path().branches().size()
+  ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()), elapsed_time_solving_.count(), elapsed_time_program_.count()
+);
     end_total_ = std::chrono::high_resolution_clock::now();
     fclose(ff);
     summary_time_ += 10;
   }
 
   // auto time_diff = end_total_ - begin_total_;
-  while(coverage_log_time_ <= time_diff.count()) {
-    std::stringstream s;
-    s << "cp coverage coverages/coverage" << coverage_log_time_;
-    system(s.str().c_str());
-    coverage_log_time_ += 10;
-    printf("summary %ld\n",coverage_log_time_);
-  }
+  // while(coverage_log_time_ <= time_diff.count()) {
+  //   std::stringstream s;
+  //   s << "cp coverage coverages/coverage" << coverage_log_time_;
+  //   system(s.str().c_str());
+  //   coverage_log_time_ += 10;
+  //   printf("summary %ld\n",coverage_log_time_);
+  // }
+  // auto end = std::chrono::high_resolution_clock::now();
+  // elapsed_time_searching_9_ += (end - start);
+  // fprintf(stderr, "elapsed_time_searching_9(UpdateCoverage) : %.2f\n", elapsed_time_searching_9_.count() );
 
   return found_new_branch;
 }
@@ -413,7 +599,17 @@ bool RandomCSSearch::UpdateCoverage(const SymbolicExecution& ex,
   //fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
 
 //  fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,Q.size(),uncovered_branches_.size());
-    fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,Q.size(),u.size());
+    // fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,Q.size(),u.size());
+    fprintf(f, "%u,%.2lf,%u,%u,%u,%.2f,%.2f,%.2f\n",
+    total_num_covered_,
+    time_diff,
+    num_prediction_fail_,
+    ex.path().constraints_idx().size(),
+    ex.path().branches().size()
+    ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()),
+   elapsed_time_solving_.count(),
+    elapsed_time_program_.count()
+);
   fclose(f);
 
   while(summary_time_ <= time_diff.count()) {
@@ -424,20 +620,30 @@ bool RandomCSSearch::UpdateCoverage(const SymbolicExecution& ex,
     }
     // fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
     // fprintf(ff, "%u,%.2lf,%u\n", total_num_covered_,time_diff,num_prediction_fail_);
-    fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,Q.size(),u.size());
-    end_total_ = std::chrono::high_resolution_clock::now();
+    // fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_,time_diff ,num_prediction_fail_,Q.size(),u.size());
+    fprintf(ff, "%u,%.2lf,%u,%u,%u,%.2f,%.2f,%.2f\n",
+    total_num_covered_,
+    time_diff,
+    num_prediction_fail_,
+    ex.path().constraints_idx().size(),
+    ex.path().branches().size()
+    ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()),
+   elapsed_time_solving_.count(),
+    elapsed_time_program_.count()
+);
+    // end_total_ = std::chrono::high_resolution_clock::now();
     fclose(ff);
     summary_time_ += 10;
   }
 
   // auto time_diff = end_total_ - begin_total_;
-  while(coverage_log_time_ <= time_diff.count()) {
-    std::stringstream s;
-    s << "cp coverage coverages/coverage" << coverage_log_time_;
-    system(s.str().c_str());
-    coverage_log_time_ += 10;
-    printf("summary %ld\n",coverage_log_time_);
-  }
+  // while(coverage_log_time_ <= time_diff.count()) {
+  //   std::stringstream s;
+  //   s << "cp coverage coverages/coverage" << coverage_log_time_;
+  //   system(s.str().c_str());
+  //   coverage_log_time_ += 10;
+  //   printf("summary %ld\n",coverage_log_time_);
+  // }
 
   return found_new_branch;
 }
@@ -508,7 +714,163 @@ bool CfgHeuristicESSearch::UpdateCoverage(const SymbolicExecution& ex,
     }
     // fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
     fprintf(ff, "%u,%.2lf,%u\n", total_num_covered_, time_diff, num_prediction_fail_);
-    end_total_ = std::chrono::high_resolution_clock::now();
+    // end_total_ = std::chrono::high_resolution_clock::now();
+    fclose(ff);
+    summary_time_ += 10;
+  }
+
+  return found_new_branch;
+}
+
+bool CfgHeuristicCSSearch::UpdateCoverage(const SymbolicExecution& ex, Context &context) {
+  return UpdateCoverage(ex, NULL, context);
+}
+
+bool CfgHeuristicCSSearch::UpdateCoverage(const SymbolicExecution& ex,
+			    set<branch_id_t>* new_branches, Context &context) {
+  const unsigned int prev_covered_ = context.num_covered;
+  // auto start = std::chrono::high_resolution_clock::now();
+  // auto end = std::chrono::high_resolution_clock::now();
+  // fprintf(stderr, "num_covered1 : %u\n", context.num_covered);
+  const vector<branch_id_t>& branches = ex.path().branches();
+  // start = std::chrono::high_resolution_clock::now();
+  for (BranchIt i = branches.begin(); i != branches.end(); ++i) {
+    if ((*i > 0) && !context.covered[*i]) {
+      // fprintf(stderr, "branch %d : %d\n", *i, covered_[*i]);
+      covered_[*i] = true;
+      covered_branches_.insert(*i);
+      // elapsed_time_searching_9_ += (end - start);
+      context.covered[*i] = true;
+
+      context.num_covered++;
+      if (new_branches) {
+	new_branches->insert(*i);
+  // covered_branches_.insert(*i);
+      // fprintf(stderr, "size of new branches = %u\n",new_branches->size());
+      }
+      if (!reached_[branch_function_[*i]]) {
+	reached_[branch_function_[*i]] = true;
+	reachable_functions_ ++;
+	reachable_branches_ += branch_count_[branch_function_[*i]];
+      }
+    }
+    if ((*i > 0) && !total_covered_[*i]) {
+      total_covered_[*i] = true;
+      total_num_covered_++;
+    }
+  }
+  // end = std::chrono::high_resolution_clock::now();
+  // // auto end = std::chrono::high_resolution_clock::now();
+  // elapsed_time_searching_9_ += (end - start);
+  // fprintf(stderr, "elapsed_time_searching_9(UpdateCoverage) : %.5f\n", elapsed_time_searching_9_.count() );
+
+
+  fprintf(stderr, "Iteration %d (%lds): covered %u branches [%u reach funs, %u reach branches].\n",
+	  num_iters_, time(NULL)-start_time_, total_num_covered_, reachable_functions_, reachable_branches_);
+
+      // PrintPathConstraint(ex.path());
+    // fprintf(stderr, "num_covered2 : %u\n", context.num_covered);
+  bool found_new_branch = (context.num_covered > prev_covered_);
+// start = std::chrono::high_resolution_clock::now();
+  if (found_new_branch) {
+   //  fprintf(stderr, "found new branch \n");
+   // for (int i = 0 ; i < Q.size() ; i++) {
+   //   if(Q[i].is_do_search_failed) {
+   //     Q[i] = Context(Q[i].cur_ex, Q[i].target_branches);
+   //     Q[i].covered = covered_;
+   //     Q[i].dist.assign(max_branch_, false);
+   //   }
+   // }
+   // for(Context &c : Q) {
+   //   if(c.is_do_search_failed) {
+   //     c = Context(c.cur_ex, c.target_branches);
+   //   }
+   // }
+    WriteCoverageToFileOrDie("coverage");
+  } else {
+
+    // fprintf(stderr, "not found new branch \n");
+ }
+ // end = std::chrono::high_resolution_clock::now();
+ // auto end = std::chrono::high_resolution_clock::now();
+ // elapsed_time_searching_10_ += (end - start);
+ // fprintf(stderr, "elapsed_time_searching_10(UpdateCoverage) : %.5f\n", elapsed_time_searching_10_.count() );
+
+  end_total_ = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> time_diff = end_total_ - begin_total_;
+  // auto start = std::chrono::high_resolution_clock::now();
+  FILE *f = fopen("log1", "a");
+
+  if (!f) {
+    fprintf(stderr, "Writing logging, failed to open %s. \n", "log1");
+    return found_new_branch;
+  }
+  size_t current_target_branch_size = 0;
+  for (Context &c : Q) {
+    current_target_branch_size += c.target_branches.size();
+  }
+  // fprintf(f, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
+  size_t concrete_path_size = 0;
+  for(size_t i  = 0 ; i < ex.path().branches().size();i++) {
+    if(ex.path().branches()[i] > 0) {
+      concrete_path_size++;
+    }
+  }
+  std::ifstream in("time");
+  double tmp = 0.0;
+  in >> tmp;
+  t1 += tmp;
+  in >> tmp;
+  t2 += tmp;
+  in >> tmp;
+  t3 += tmp;
+  in.close();
+  // fprintf(stderr, "here1\n");
+  // t1 += std::stod(std::string(getenv("CREST_TIME_1")));
+  // t2 += std::stod(std::string(getenv("CREST_TIME_2")));
+  // t3 += std::stod(std::string(getenv("CREST_TIME_3")));
+  // fprintf(stderr, "here2\n");
+
+  struct stat st;
+  stat("szd_execution", &st);
+
+  fprintf(f, "%u,%.2lf,%u,%u,%u,%u,%u,%u,%u,%u,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+     total_num_covered_, time_diff, num_prediction_fail_, Q.size(), current_target_branch_size,covered_branches_.size(),ex.path().constraints_idx().size(), ex.path().branches().size(), concrete_path_size
+     , st.st_size
+     ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count())
+     , elapsed_time_solving_.count()
+     , elapsed_time_program_.count()
+     , t1, t2, t3
+  );
+  // auto end = std::chrono::high_resolution_clock::now();
+  // auto end = std::chrono::high_resolution_clock::now();
+  // elapsed_time_searching_11_ += (end - start);
+  // fprintf(stderr, "elapsed_time_searching_11(UpdateCoverage) : %.5f\n", elapsed_time_searching_11_.count() );
+
+  fclose(f);
+
+
+
+
+  while(summary_time_ <= time_diff.count()) {
+    FILE *ff = fopen("summary1", "a");
+    if (!ff) {
+      fprintf(stderr, "Writing summary, failed to open %s. \n", "summary1");
+      return found_new_branch;
+    }
+    // fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_,num_constraints_size_, num_unsat_);
+    // fprintf(ff, "%u,%.2lf,%u\n", total_num_covered_, time_diff, num_prediction_fail_);
+    //fprintf(ff, "%u,%.2lf,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_, Q.size(), current_target_branch_size);
+    // fprintf(ff, "%u,%.2lf,%u,%u,%u,%u,%u,%u\n", total_num_covered_, time_diff, num_prediction_fail_, Q.size(), current_target_branch_size,covered_branches_.size(),ex.path().constraints_idx().size(), ex.path().branches().size());
+  //   fprintf(ff, "%u,%.2lf,%u,%u,%u,%u,%u,%u,%.2f,%.2f,%.2f\n",
+  //    total_num_covered_, time_diff, num_prediction_fail_, Q.size(), current_target_branch_size,covered_branches_.size(),ex.path().constraints_idx().size(), ex.path().branches().size()
+  //    ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()), elapsed_time_solving_.count(), elapsed_time_program_.count()
+  // );
+  fprintf(ff, "%u,%.2lf,%u,%u,%u,%u,%u,%u,%u,%.2f,%.2f,%.2f\n",
+     total_num_covered_, time_diff, num_prediction_fail_, Q.size(), current_target_branch_size,covered_branches_.size(),ex.path().constraints_idx().size(), ex.path().branches().size(), concrete_path_size
+     ,elapsed_time_total_.count()-(elapsed_time_program_.count()+elapsed_time_solving_.count()), elapsed_time_solving_.count(), elapsed_time_program_.count()
+  );
+    // end_total_ = std::chrono::high_resolution_clock::now();
     fclose(ff);
     summary_time_ += 10;
   }
@@ -568,7 +930,11 @@ bool Search::SolveAtBranch(const SymbolicExecution& ex,
   constraints[branch_idx]->Negate();
   // fprintf(stderr, "Yices . . . ");
   bool success ;
+  auto start = std::chrono::high_resolution_clock::now();
   success = Z3Solver::IncrementalSolve(ex.inputs(), ex.vars(), cs, &soln);
+  auto end = std::chrono::high_resolution_clock::now();
+  elapsed_time_solving_ += (end - start);
+  // fprintf(stderr, "elapsed_time_solving_ : %f\n", elapsed_time_solving_.count() );
   // fprintf(stderr, "%d\n", success);
 
   constraints[branch_idx]->Negate();
@@ -1135,7 +1501,7 @@ bool CfgBaselineSearch::DoSearch(int depth, int iters, int pos,
 //// CfgHeuristicESSearch ////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
-void CfgHeuristicESSearch::GetTargetBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist , size_t depth, set<branch_id_t> &t) {
+void CfgHeuristicESSearch::GetSearchingBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist , size_t depth, set<branch_id_t> &t) {
   // fprintf(stderr, "Got %u dist of %u : %u\n", b,b,dist[b]);
   vector<branch_id_t> nbhr = cfg_[b];
   if(dist[b] == 0) {
@@ -1149,10 +1515,10 @@ void CfgHeuristicESSearch::GetTargetBranches(branch_id_t b, vector<bool> &covere
     // set<branch_id_t>::iterator it;
     for(size_t i = 0 ; i < nbhr.size(); i++) {
         if (dist[nbhr[i]] <= depth && t.find(nbhr[i]) == t.end()) {
-          GetTargetBranches(nbhr[i], covered, dist, depth - 1, t);
+          GetSearchingBranches(nbhr[i], covered, dist, depth - 1, t);
         }
         if (dist[paired_branch_[nbhr[i]]] <= depth && t.find(paired_branch_[nbhr[i]]) == t.end()) {
-          GetTargetBranches(paired_branch_[nbhr[i]], covered, dist, depth - 1, t);
+          GetSearchingBranches(paired_branch_[nbhr[i]], covered, dist, depth - 1, t);
         }
     }
   }
@@ -1261,6 +1627,7 @@ void CfgHeuristicESSearch::Run() {
     if(context.is_do_search_failed) {
       // fprintf(stderr, "is_do_search_failed\n");
       // (++input_file_idx_)/input_file_names_.size();
+      context.searching_branches.clear();
       input_file_idx_ = (++input_file_idx_) % input_file_names_.size();
       rotation_count_ = 0;
       continue;
@@ -1280,7 +1647,7 @@ void CfgHeuristicESSearch::Run() {
       UpdateBranchDistances(context.covered, context.dist);
       context.iters=30;
       context.is_reset= false;
-      context.target_branches.clear();
+      context.searching_branches.clear();
       UpdateInputFileIdx();
     } else {
     // fprintf(stderr, "while true4\n");
@@ -1300,7 +1667,7 @@ void CfgHeuristicESSearch::Run() {
           context.do_search_once_found_new_branch = false;
           context.new_branches.clear();
           context.covered = covered_;
-          context.target_branches.clear();
+          context.searching_branches.clear();
           UpdateBranchDistances(context.covered, context.dist);
           UpdateInputFileIdx();
           // fprintf(stderr, "here");
@@ -1320,12 +1687,12 @@ void CfgHeuristicESSearch::Run() {
         // fprintf(stderr,"stack is not empty\n");
         if(!SolveOnePathAlongCfg(context)) {
           // target branch check
-          for(set<branch_id_t>::iterator it=context.target_branches.begin(); it != context.target_branches.end(); it++) {
+          for(set<branch_id_t>::iterator it=context.searching_branches.begin(); it != context.searching_branches.end(); it++) {
             if(covered_[*it]) {
-              context.target_branches.erase(it);
+              context.searching_branches.erase(it);
             }
           }
-          if(context.target_branches.empty()) {
+          if(context.searching_branches.empty()) {
             context.stack_sub_context = std::stack<SubContext>();
           }
           if(!context.stack_sub_context.empty()) {
@@ -1341,9 +1708,9 @@ void CfgHeuristicESSearch::Run() {
                context.iters=30;
                context.cur_idx = 0;
                UpdateInputFileIdx();
-               context.target_branches.clear();
+               context.searching_branches.clear();
             } else {
-              context.target_branches.clear();
+              context.searching_branches.clear();
               UpdateInputFileIdx();
               context.cur_idx++;
             }
@@ -1357,7 +1724,7 @@ void CfgHeuristicESSearch::Run() {
           context.scoredBranches.clear();
           context.new_branches.clear();
           context.cur_idx = 0;
-          context.target_branches.clear();
+          context.searching_branches.clear();
           context.iters=30;
           UpdateInputFileIdx();
         }
@@ -1472,7 +1839,7 @@ bool CfgHeuristicESSearch::DoSearchOnce(Context& context) {
   while(context.cur_idx < context.scoredBranches.size()) {
     // fprintf(stderr, "DoSearchOnce: cur_idx = %u/%u, iters = %u \n", context.cur_idx, context.scoredBranches.size(), context.iters);
     if ((context.iters <= 0) || (context.scoredBranches[context.cur_idx].second > kInfiniteDistance)) {
-
+          context.searching_branches.clear();
           context.is_do_search_failed = true;
           return false;
     }
@@ -1559,13 +1926,13 @@ bool CfgHeuristicESSearch::DoSearchOnce(Context& context) {
     }
     num_top_solves_ ++;
     num_top_solve_successes_ ++;
-    // fprintf(stderr, "Before GetTarget size : %u\n", context.target_branches.size());
-    assert(context.target_branches.size() == 0);
-    GetTargetBranches(bid, context.covered, context.dist ,context.scoredBranches[context.cur_idx].second-1, context.target_branches);
-    fprintf(stderr, "After GetTarget size : %u\n", context.target_branches.size());
-    fprintf(stderr, "size of target branches : %u\n", context.target_branches.size());
+    // fprintf(stderr, "Before GetTarget size : %u\n", context.searching_branches.size());
+    assert(context.searching_branches.size() == 0);
+    GetSearchingBranches(bid, context.covered, context.dist ,context.scoredBranches[context.cur_idx].second-1, context.searching_branches);
+    fprintf(stderr, "After GetSearchingBranches size : %u\n", context.searching_branches.size());
+    fprintf(stderr, "size of target branches : %u\n", context.searching_branches.size());
     fprintf(stderr, "cur target branches: \n");
-    for(set<branch_id_t>::iterator it = context.target_branches.begin(); it!=context.target_branches.end(); it++) {
+    for(set<branch_id_t>::iterator it = context.searching_branches.begin(); it!=context.searching_branches.end(); it++) {
       fprintf(stderr, "%d ",*it);
     }
     fprintf(stderr, "\n");
@@ -1573,16 +1940,16 @@ bool CfgHeuristicESSearch::DoSearchOnce(Context& context) {
     for(size_t i = 0 ; i < v_context_.size() ; i++) {
       if(i != input_file_idx_) {
         Context &c = v_context_[i];
-        for(set<branch_id_t>::iterator it = c.target_branches.begin(); it!=c.target_branches.end(); it++) {
-            set<branch_id_t>::iterator it2 = context.target_branches.find(*it);
-            if( it2 != context.target_branches.end()) {
+        for(set<branch_id_t>::iterator it = c.searching_branches.begin(); it!=c.searching_branches.end(); it++) {
+            set<branch_id_t>::iterator it2 = context.searching_branches.find(*it);
+            if( it2 != context.searching_branches.end()) {
               fprintf(stderr, "erase %d: \n", *it2);
-              context.target_branches.erase(it2);
+              context.searching_branches.erase(it2);
             }
         }
       }
     }
-    if(!context.target_branches.empty()) {
+    if(!context.searching_branches.empty()) {
       // fprintf(stderr, "Target branches are not empty.\n");
       // fprintf(stderr, "Try SolveAlongCfg\n");
       context.stack_sub_context.push(SubContext(b_idx, context.scoredBranches[context.cur_idx].second -1, new_ex));
@@ -1607,7 +1974,7 @@ bool CfgHeuristicESSearch::DoSearchOnce(Context& context) {
       // }
       // context.iters++;
     }
-
+    context.searching_branches.clear();
     return false;
   }
   // context.is_reset = true;
@@ -2249,6 +2616,10 @@ void CfgHeuristicSearch::Run() {
 
     // Execution on empty/random inputs.
     fprintf(stderr, "RESET\n");
+    if(is_save_testcases_option_) {
+      string s = "cp seeds/input1 testcases/input" + std::to_string(num_iters_ + 1);
+      system(s.c_str());
+    }
     RunProgram(vector<value_t>(), &ex);
     if (UpdateCoverage(ex)) {
       UpdateBranchDistances();
@@ -2286,7 +2657,6 @@ void CfgHeuristicSearch::PrintStats() {
 	  num_solve_pred_fails_, num_solve_recurses_);
 }
 
-
 void CfgHeuristicSearch::UpdateBranchDistances() {
   // We run a BFS backward, starting simultaneously at all uncovered vertices.
   queue<branch_id_t> Q;
@@ -2306,13 +2676,12 @@ void CfgHeuristicSearch::UpdateBranchDistances() {
 
     for (BranchIt j = cfg_rev_[i].begin(); j != cfg_rev_[i].end(); ++j) {
       if (dist_i + 1 < dist_[*j]) {
-	dist_[*j] = dist_i + 1;
-	Q.push(*j);
+      	dist_[*j] = dist_i + 1;
+      	Q.push(*j);
       }
     }
   }
 }
-
 
 
 bool CfgHeuristicSearch::DoSearch(int depth,
@@ -2349,15 +2718,6 @@ bool CfgHeuristicSearch::DoSearch(int depth,
 
       scoredBranches[i].second = dist_[bid] + seen[bid];
       seen[bid] += 1;
-
-      /*
-      if (dist_[bid] == 0) {
-        scoredBranches[i].second = 0;
-      } else {
-        scoredBranches[i].second = dist_[bid] + seen[bid];
-        seen[bid] += 1;
-      }
-      */
     }
   }
   stable_sort(scoredBranches.begin(), scoredBranches.end(), ScoredBranchComp());
@@ -2405,16 +2765,16 @@ bool CfgHeuristicSearch::DoSearch(int depth,
 	      dist_[bid], scoredBranches[i].second);
       size_t min_dist = MinCflDistance(b_idx, cur_ex, new_branches);
       // Check if we were lucky.
-      if (FindAlongCfg(b_idx, dist_[bid], cur_ex, new_branches)) {
-	assert(min_dist <= dist_[bid]);
-	// A legitimate find -- return success.
-	if (dist_[bid] == 0) {
-	  num_inner_zero_successes_ ++;
-	} else {
-	  num_inner_nonzero_successes_ ++;
-	}
-	success_ex_.Swap(cur_ex);
-	return true;
+          if (FindAlongCfg(b_idx, dist_[bid], cur_ex, new_branches)) {
+    	assert(min_dist <= dist_[bid]);
+    	// A legitimate find -- return success.
+    	if (dist_[bid] == 0) {
+    	  num_inner_zero_successes_ ++;
+    	} else {
+    	  num_inner_nonzero_successes_ ++;
+    	}
+    	success_ex_.Swap(cur_ex);
+    	return true;
       } else {
 	// We got lucky, but as long as there were no prediction failures,
 	// we'll finish the CFG search to see if that works, too.
@@ -2431,18 +2791,7 @@ bool CfgHeuristicSearch::DoSearch(int depth,
 	continue;
       }
     }
-    // size_t b_idx = prev_ex.path().constraints_idx()[scoredBranches[i].first];
-    // branch_id_t bid = paired_branch_[prev_ex.path().branches()[b_idx]];
-    // set<branch_id_t> t;
-    // GetTargetBranches(bid, covered_, scoredBranches[i].second - 1, t);
-    // fprintf(stderr, "target branches of bid %u, depth : %u\n", bid, scoredBranches[i].second - 1);
 
-    // for(set<branch_id_t>::iterator jjj = t.begin() ; jjj != t.end(); jjj++) {
-      // fprintf(stderr, "%d\n", *jjj );
-    // }
-    // if(t.size()!= 0) {
-    //   exit(0);
-    // }
     // If we reached here, then scoredBranches[i].second is greater than 0.
     num_top_solves_ ++;
     if ((dist_[bid] > 0) &&
@@ -2880,7 +3229,7 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
 
 
   ////////////////////////////////////////////////////////////////////////
-  //// RandomCSSearch ////////////////////////////////////////////////////
+  //// Random ////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////
 
 
@@ -2914,36 +3263,24 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
   }
 
   void RandomCSSearch::Run() {
-    // Execute on initial input
     size_t idx = 0;
     while(true) {
       SymbolicExecution next_ex;
       vector<value_t> next_input;
-
       covered_.assign(max_branch_, false);
-
       pf_count_.clear();
       reachable_branches_set_.clear();
       covered_branches_.clear();
-
       fprintf(stderr, "RESET\n");
-      // CSSearch::Context c = Context();
       RunProgram(next_input, &next_ex);
-      // uncovered_branches_.clear();
       if(UpdateCoverage(next_ex)) {
         fprintf(stderr, "found new branch \n");
       }
       set<branch_id_t> uncovered_branches;
-      // for (const branch_id_t &b: next_ex.path().branches()) {
       for (const size_t &i: next_ex.path().constraints_idx()) {
         covered_branches_.insert(next_ex.path().branches()[i]);
         uncovered_branches.insert(paired_branch_[next_ex.path().branches()[i]]);
       }
-      // fprintf(stderr, "uncovered_branches:\n");
-      // for (const branch_id_t &b: uncovered_branches_) {
-      //   fprintf(stderr, "%d\n",b);
-      // }
-
       Q.push_back(EXContext(next_ex, uncovered_branches));
       while (Q.size()!= 0) {
         EXContext c = Q.front();
@@ -2962,44 +3299,28 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
           } else {
             c.target_branches = cur_target_branches;
           }
-
-        // fprintf(stderr, "Queue Size : %u\n", Q.size());
-        // size_t iii = 0;
-        // for(Context &c : Q) {
-        // for(deque<EXContext>::iterator it=Q.begin(); it != Q.end(); ++it) {
-        //   fprintf(stderr, "Context%u has %u target branches\n",++iii,(*it).target_branches.size());
-        // }
         bool search_failed = false;
         for(size_t i = AssignEnergy(c); i > 0; i--) {
           if (SolveRandomBranch(c.ex, &next_input, &idx)) {
             RunProgram(next_input, &next_ex);
-
             // Update B
             for (const size_t &i: next_ex.path().constraints_idx()) {
               covered_branches_.insert(next_ex.path().branches()[i]);
             }
-
             if(UpdateCoverage(next_ex)) {
               fprintf(stderr, "found new branch \n");
             }
             if(!CheckPrediction(c.ex, next_ex, c.ex.path().constraints_idx()[idx]) ) {
               pf_count_[c.ex.path().branches()[c.ex.path().constraints_idx()[idx]]]++;
               fprintf(stderr, "Prediction Failure!\n");
-              // fprintf(stderr, "pf_count_[%d]=%u\n",c.ex.path().branches()[c.ex.path().constraints_idx()[idx]],pf_count_[c.ex.path().branches()[c.ex.path().constraints_idx()[idx]]]);
             }
-
-            // size_t uncovered_size_before = uncovered_branches_.size();
             set<branch_id_t> current_uncovered_branches;
-
-
-            // BranchesOf(p) - B
             for (const size_t &i: next_ex.path().constraints_idx()) {
               branch_id_t b = next_ex.path().branches()[i];
               if(!covered_[paired_branch_[b]]) {
                 current_uncovered_branches.insert(paired_branch_[b]);
               }
             }
-            // fprintf(stderr, "cur uncovered size:%u\n",current_uncovered_branches.size());
             set<branch_id_t> u;
             set_difference(
                current_uncovered_branches.begin(),
@@ -3019,38 +3340,15 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
                 );
                 u = tmp;
             }
-
             if(u.size() > 0 ) {
-              // fprintf(stderr, "new_uncovered_branches size:%u\n",u.size());
               Q.push_back(EXContext(next_ex, u));
-              // fprintf(stderr, "uncovered_branches:\n");
-              // for (const branch_id_t &b: u) {
-              //   fprintf(stderr, "%d\n",b);
-              // }
             }
-
-            // fprintf(stderr, "Queue Size : %u\n", Q.size());
-            // for (const branch_id_t &b: current_uncovered_branches) {
-            //   uncovered_branches_.insert(b);
-            // }
             c.ex.Swap(next_ex);
         } else {
           search_failed = true;
           break;
         }
       }
-
-      // bool all_target_branches_is_searched_enough=(c.target_branches.size()>0);
-      // for (auto it = c.target_branches.begin(); it!=c.target_branches.end(); ++it) {
-      //     if(covered_[*it]) {
-      //       c.target_branches.erase(it);
-      //     } else {
-      //       if(pf_count_[*it] < 10) {
-      //         all_target_branches_is_searched_enough = false;
-      //       }
-      //     }
-      // }
-
       if(!search_failed
         && !c.target_branches.empty()
         && next_ex.path().branches() != c.ex.path().branches()) {
@@ -3109,5 +3407,994 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
     return false;
   }
 
+  ////////////////////////////////////////////////////////////////////////
+  //// CfgHeuristicCSSearch //////////////////////////////////////////////
+  ////////////////////////////////////////////////////////////////////////
+
+  size_t CfgHeuristicCSSearch::AssignEnergy(Context &c) {
+    size_t energy = 0;
+    set<branch_id_t> all_branches;
+    for(const size_t &i : c.cur_ex.path().constraints_idx()) {
+      branch_id_t b = c.cur_ex.path().branches()[i];
+      all_branches.insert(b);
+    }
+    for(const branch_id_t &t : all_branches) {
+      branch_id_t b= paired_branch_[t];
+      if(covered_[b]) {
+        energy += 1;
+      } else {
+        energy += 10 - min(pf_count_[paired_branch_[b]],(size_t) 10);
+      }
+    }
+    fprintf(stderr, "Energy is 10\n", energy);
+    return 10;
+
+    // fprintf(stderr, "Energy is %u\n", 10);
+    // return 10;
+  }
+
+  void CfgHeuristicCSSearch::GetSearchingBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist , size_t depth, set<branch_id_t> &t) {
+    // fprintf(stderr, "Got %u dist of %u : %u\n", b,b,dist[b]);
+    vector<branch_id_t> nbhr = cfg_[b];
+    if(dist[b] == 0) {
+      // fprintf(stderr, "branch %u is not covered\n", b);
+      t.insert(b);
+      return;
+    } else {
+      for(size_t i = 0 ; i < nbhr.size(); i++) {
+          if (dist[nbhr[i]] <= depth && t.find(nbhr[i]) == t.end()) {
+            GetSearchingBranches(nbhr[i], covered, dist, depth - 1, t);
+          }
+          if (dist[paired_branch_[nbhr[i]]] <= depth && t.find(paired_branch_[nbhr[i]]) == t.end()) {
+            GetSearchingBranches(paired_branch_[nbhr[i]], covered, dist, depth - 1, t);
+          }
+      }
+    }
+  }
+
+  CfgHeuristicCSSearch::CfgHeuristicCSSearch(const string& program, int max_iterations) : Search(program, max_iterations),
+      cfg_(max_branch_), cfg_rev_(max_branch_), dist_notusing(max_branch_) {
+
+    // Read in the CFG.
+    ifstream in("cfg_branches", ios::in | ios::binary);
+    assert(in);
+    size_t num_branches;
+    in.read((char*)&num_branches, sizeof(num_branches));
+    assert(num_branches == branches_.size());
+    for (size_t i = 0; i < num_branches; i++) {
+      branch_id_t src;
+      size_t len;
+      in.read((char*)&src, sizeof(src));
+      in.read((char*)&len, sizeof(len));
+      cfg_[src].resize(len);
+      in.read((char*)&cfg_[src].front(), len * sizeof(branch_id_t));
+    }
+    in.close();
+
+    // Construct the reversed CFG.
+    for (BranchIt i = branches_.begin(); i != branches_.end(); ++i) {
+      for (BranchIt j = cfg_[*i].begin(); j != cfg_[*i].end(); ++j) {
+        cfg_rev_[*j].push_back(*i);
+      }
+    }
+  }
+
+  CfgHeuristicCSSearch::~CfgHeuristicCSSearch() { }
+
+  void CfgHeuristicCSSearch::UpdateCurContext() {
+    fprintf(stderr, "Size of Q : %u\n", Q.size());
+    fprintf(stderr, "Current context_idx_ : %u\n", context_idx_);
+
+    assert(Q.size()!=0);
+    if( Q[context_idx_].energy > 0) {
+      --Q[context_idx_].energy;
+      fprintf(stderr, "current energy : %u\n", Q[context_idx_].energy);
+
+    } else {
+      fprintf(stderr, "current energy : %u\n", Q[context_idx_].energy);
+      // energy is 0
+      // check all contexts are marked
+      // context_idx_ = (context_idx_+1) % Q.size();
+      fprintf(stderr, "UpdateCurContext 1\n");
+      while (Q.size()!=0) {
+        fprintf(stderr, "aaa context_idx_ = %u\n", context_idx_);
+        context_idx_ = (context_idx_ + 1) % Q.size();
+        fprintf(stderr, "bbb context_idx_ = %u\n", context_idx_);
+        fprintf(stderr, "UpdateCurContext 2\n");
+        bool is_all_contexts_failed = true;
+        for(Context &c : Q) {
+          if (!c.is_do_search_failed) {
+            is_all_contexts_failed = false;
+            break;
+          }
+        }
+        if(is_all_contexts_failed) {
+          fprintf(stderr, "All Contexts Failed\n");
+          // auto end = std::chrono::high_resolution_clock::now();
+          // elapsed_time_searching_7_ += (end - start);
+          // fprintf(stderr, "elapsed_time_searching_7 : %.5f\n", elapsed_time_searching_7_.count() );
+          return;
+        } else {
+          fprintf(stderr, "Not all Contexts Failed\n");
+        }
+        while (Q[context_idx_].is_do_search_failed) {
+          context_idx_ = (context_idx_ + 1) % Q.size();
+          fprintf(stderr, "ccc context_idx_ = %u\n", context_idx_);
+        }
+        fprintf(stderr, "111\n");
+        Context &context = Q[context_idx_ % Q.size()];
+        // cur_context = Q[context_idx_];
+        set<branch_id_t> target_branches;
+        // fprintf(stderr, "111\n");
+        set_difference(
+          context.target_branches.begin(),
+          context.target_branches.end(),
+          covered_branches_.begin(),
+          covered_branches_.end(),
+          std::inserter(target_branches,target_branches.end())
+        );
+        fprintf(stderr, "222\n");
+        if(!target_branches.empty()) {
+          // fprintf(stderr, "333\n");
+          context.target_branches = target_branches;
+          context.energy = AssignEnergy(context);
+          // fprintf(stderr, "aaaa num_covered : %u\n", context.num_covered);
+          context.covered = covered_;
+          UpdateBranchDistances(context.covered, context.dist);
+          // fprintf(stderr, "current energy2 : %u\n", context.energy);
+          // fprintf(stderr, "current energy3 : %u\n", Q[context_idx_].energy);
+          // auto end = std::chrono::high_resolution_clock::now();
+          // elapsed_time_searching_7_ += (end - start);
+          // fprintf(stderr, "elapsed_time_searching_7 : %.5f\n", elapsed_time_searching_7_.count() );
+          return;
+        } else {
+          fprintf(stderr, "444\n");
+          Q[context_idx_].energy = 0;
+          fprintf(stderr, "erase %u\n", context_idx_);
+          fprintf(stderr, "a Size of Q : %u\n", Q.size());
+          // Q.erase(Q.begin()+context_idx_);
+          Q[context_idx_].is_do_search_failed = true;
+          Q[context_idx_].target_branches.clear();
+
+          fprintf(stderr, "erase %u end\n", context_idx_);
+          fprintf(stderr, "b Size of Q : %u\n", Q.size());
+
+        }
+      }
+    }
+    // auto end = std::chrono::high_resolution_clock::now();
+    // elapsed_time_searching_7_ += (end - start);
+    // fprintf(stderr, "elapsed_time_searching_7 : %.5f\n", elapsed_time_searching_7_.count() );
+  }
+
+  void CfgHeuristicCSSearch::GetNewTargetBranches(SymbolicExecution &next_ex,set<branch_id_t> &u){
+    // auto start = std::chrono::high_resolution_clock::now();
+    set<branch_id_t> current_uncovered_branches;
+    for (const size_t &i: next_ex.path().constraints_idx()) {
+      branch_id_t b = next_ex.path().branches()[i];
+      if(!covered_[paired_branch_[b]]) {
+      current_uncovered_branches.insert(paired_branch_[b]);
+      }
+    }
+    set_difference(
+       current_uncovered_branches.begin(),
+       current_uncovered_branches.end(),
+       covered_branches_.begin(),
+       covered_branches_.end(),
+       std::inserter(u,u.end())
+      );
+      // fprintf(stderr, "covered_branches_ size : %u\n", covered_branches_.size());
+    for(const Context &c: Q) {
+      set<branch_id_t> tmp;
+      set_difference(
+         u.begin(),
+         u.end(),
+         c.target_branches.begin(),
+         c.target_branches.end(),
+         std::inserter(tmp,tmp.end())
+        );
+        u = tmp;
+    }
+    // auto end = std::chrono::high_resolution_clock::now();
+    // elapsed_time_searching_3_ += (end - start);
+    // fprintf(stderr, "elapsed_time_searching_3(GetNewTargetBranches) : %.2f\n", elapsed_time_searching_3_ );
+  }
+
+  void CfgHeuristicCSSearch::Run() {
+    // v_context_.resize(input_file_names_.size());
+    num_covered_ = 0;
+    // string names[] = {"input1", "input10", "input2", "input3", "input4", "input5", "input6", "input7", "input8", "input9"};
+    string names[] = {"input1", "input10", "input2", "input3", "input4", "input5", "input6", "input7", "input8", "input9"};
+    // deque<Context> Q;
+    // size_t context_idx = 0;
+    covered_.resize(max_branch_, false);
+    while(true) {
+      {
+        // check all contexts are marked
+        fprintf(stderr, "Run1\n");
+        bool is_all_contexts_failed = true;
+        for(Context &c : Q) {
+          if (!c.is_do_search_failed) {
+            is_all_contexts_failed = false;
+            break;
+          }
+        }
+
+        // RESET Search
+        if (is_all_contexts_failed) {
+          fprintf(stderr, "RESET Search\n");
+          system("rm -r inputs");
+          system("cp -r seeds inputs");
+          if(is_save_testcases_option_) {
+            // string s = "touch testcases/input" + std::to_string(num_iters_ + 1);
+            string s = "cp seeds/input1 testcases/input" + std::to_string(num_iters_+1);
+            std::cerr << s << '\n';
+            system(s.c_str());
+          }
+          // RESET global data structures
+          Q.clear();
+          context_idx_ = 0;
+          covered_branches_.clear();
+          pf_count_.clear();
+          covered_.assign(max_branch_, false);
+          Q.emplace_back();
+          Context &new_context = Q.back();
+          new_context.covered.resize(max_branch_, false);
+          new_context.dist.resize(max_branch_, 0);
+          fprintf(stderr, "After reset : dist size = %zu\n", new_context.dist.size());
+          RunProgram(vector<value_t>(), &new_context.cur_ex);
+
+          for(BranchIt i = new_context.cur_ex.path().branches().begin(); i!=new_context.cur_ex.path().branches().end(); i++) {
+            new_context.target_branches.insert(*i);
+          }
+          if (UpdateCoverage(new_context.cur_ex, new_context) ) {
+            // fprintf(stderr, "found new branch\n");
+          } else {
+            // fprintf(stderr, "not found new branch\n");
+          }
+          // fprintf(stderr, "num covered : %u\n", new_context.num_covered);
+          UpdateBranchDistances(new_context.covered, new_context.dist);
+          // fprintf(stderr, "b0\n");
+          // Q.push_back(new_context);
+          // cur_context_ = Q[context_idx_];
+          // fprintf(stderr, "b1\n");
+          UpdateCurContext();
+          // fprintf(stderr, "b2\n");
+        }
+        fprintf(stderr, "Run b\n");
+        if(Q[context_idx_].stack_sub_context.empty()) {
+          fprintf(stderr, "Run b2\n");
+          // auto start = std::chrono::high_resolution_clock::now();
+          if(DoSearchOnce()) {
+            fprintf(stderr, "Run b3\n");
+            // Context &cur_context = Q[context_idx_];
+
+            Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
+
+            Q[context_idx_].iters=30;
+            Q[context_idx_].cur_idx = 0;
+            Q[context_idx_].scoredBranches.clear();
+            Q[context_idx_].do_search_once_found_new_branch = false;
+            Q[context_idx_].new_branches.clear();
+            Q[context_idx_].covered = covered_;
+            Q[context_idx_].searching_branches.clear();
+            UpdateBranchDistances(Q[context_idx_].covered, Q[context_idx_].dist);
+            UpdateCurContext();
+            fprintf(stderr, "Run2\n");
+          } else {
+            // 1. 새로운 브랜치를 못찾고, prediction failure
+            // 2. FindAlongCfg 성공후 stack에 추가
+            // 3. Do search fail ( execution 종료)
+            if (Q[context_idx_].is_do_search_failed) {
+              // Context &Q[context_idx_] = Q[context_idx_];
+              Q[context_idx_].energy = 0;
+              fprintf(stderr, "Search failed : skip this context\n");
+              fprintf(stderr, "ffff : %u\n", Q[context_idx_].cur_ex.path().constraints().size());
+              // Q[context_idx_]_.target_branches.clear();
+              UpdateCurContext();
+            }
+          }
+          // auto end = std::chrono::high_resolution_clock::now();
+          // elapsed_time_searching_4_ += (end - start);
+          // fprintf(stderr, "elapsed_time_searching_4(DoSearch): %.2f\n", elapsed_time_searching_4_ );
+        } else {
+          // fprintf(stderr,"stack is not empty\n");
+          fprintf(stderr, "Run c\n");
+          if(!SolveOnePathAlongCfg()) {
+            fprintf(stderr, "Run d\n");
+            // target branch check
+            for(set<branch_id_t>::iterator it=Q[context_idx_].searching_branches.begin(); it != Q[context_idx_].searching_branches.end(); it++) {
+              if(covered_[*it]) {
+                fprintf(stderr, " erase searching branch %u\n", *it);
+                Q[context_idx_].searching_branches.erase(it);
+              }
+            }
+            if(Q[context_idx_].searching_branches.empty()) {
+              Q[context_idx_].stack_sub_context = std::stack<SubContext>();
+            }
+            if(!Q[context_idx_].stack_sub_context.empty()) {
+                // Keep solve one path along cfg
+                UpdateCurContext();
+            } else { // stack is empty
+              if(Q[context_idx_].do_search_once_found_new_branch) {
+                 Q[context_idx_].covered = covered_;
+                 UpdateBranchDistances(Q[context_idx_].covered, Q[context_idx_].dist);
+                 Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
+                 Q[context_idx_].new_branches.clear();
+                 Q[context_idx_].scoredBranches.clear();
+                 Q[context_idx_].iters=30;
+                 Q[context_idx_].cur_idx = 0;
+                 Q[context_idx_].searching_branches.clear();
+                 UpdateCurContext();
+              } else {
+                Q[context_idx_].searching_branches.clear();
+                Q[context_idx_].cur_idx++;
+                UpdateCurContext();
+              }
+              Q[context_idx_].do_search_once_found_new_branch = false;
+            }
+          } else {
+            fprintf(stderr, "Run e\n");
+            UpdateBranchDistances(Q[context_idx_].covered, Q[context_idx_].dist);
+            Q[context_idx_].stack_sub_context = std::stack<SubContext>();
+            Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
+            Q[context_idx_].scoredBranches.clear();
+            Q[context_idx_].new_branches.clear();
+            Q[context_idx_].cur_idx = 0;
+            Q[context_idx_].searching_branches.clear();
+            Q[context_idx_].iters=30;
+            UpdateCurContext();
+          }
+        }
+      }
+    }
+  }
+
+
+  void CfgHeuristicCSSearch::UpdateBranchDistances(vector<bool>& covered, vector<long unsigned int>& dist) {
+    // We run a BFS backward, starting simultaneously at all uncovered vertices.
+    // fprintf(stderr, "covered size: %u, dist size %u", covered.size(), dist.size());
+    // auto start = std::chrono::high_resolution_clock::now();
+    queue<branch_id_t> Q;
+    for (BranchIt i = branches_.begin(); i != branches_.end(); ++i) {
+      // if (!all_covered_[*i]) {
+      if (!covered[*i]) {
+        dist[*i] = 0;
+        Q.push(*i);
+      } else {
+        dist[*i] = kInfiniteDistance;
+      }
+    }
+
+    while (!Q.empty()) {
+      branch_id_t i = Q.front();
+      size_t dist_i = dist[i];
+      Q.pop();
+
+      for (BranchIt j = cfg_rev_[i].begin(); j != cfg_rev_[i].end(); ++j) {
+        if (dist_i + 1 < dist[*j]) {
+  	dist[*j] = dist_i + 1;
+  	Q.push(*j);
+        }
+      }
+    }
+
+    // auto end = std::chrono::high_resolution_clock::now();
+    // elapsed_time_searching_1_ += (end - start);
+    // fprintf(stderr, "elapsed_time_searching_1(UpdateBranchDistances) : %.2f\n", elapsed_time_searching_1_.count() );
+  }
+
+
+  bool CfgHeuristicCSSearch::DoSearchOnce() {
+    fprintf(stderr,"DoSearchOnce\n");
+    fprintf(stderr,"context energy:%u\n", Q[context_idx_].energy);
+    fprintf(stderr, "aaaa context %u\n", context_idx_);
+    // Context &context = Q[context_idx_];
+    if(Q[context_idx_].scoredBranches.empty()) {
+      // fprintf(stderr, "scoredBranches is empty\n");
+      // auto start = std::chrono::high_resolution_clock::now();
+
+      Q[context_idx_].covered = covered_;
+      fprintf(stderr, "size of covered_ = %zu\n", covered_.size());
+      fprintf(stderr, "constraints size = %zu\n", Q[context_idx_].cur_ex.path().constraints().size());
+      Q[context_idx_].scoredBranches.resize(Q[context_idx_].cur_ex.path().constraints().size());
+      fprintf(stderr, "scoredBranches size = %zu\n", Q[context_idx_].scoredBranches.size());
+      for (size_t i = 0; i < Q[context_idx_].scoredBranches.size(); i++) {
+        Q[context_idx_].scoredBranches[i].first = i;
+      }
+      fprintf(stderr, "here aaa\n", Q[context_idx_].cur_ex.path().constraints().size());
+      { // Compute (and sort by) the scores.
+         // fprintf(stderr,"start computing scores\n");
+        random_shuffle(Q[context_idx_].scoredBranches.begin(), Q[context_idx_].scoredBranches.end());
+        map<branch_id_t,int> seen;
+        for (size_t i = 0; i < Q[context_idx_].scoredBranches.size(); i++) {
+          // fprintf(stderr, "%u ", i);
+          size_t idx = Q[context_idx_].scoredBranches[i].first;
+
+          size_t branch_idx = Q[context_idx_].cur_ex.path().constraints_idx()[idx];
+
+          branch_id_t bid = paired_branch_[Q[context_idx_].cur_ex.path().branches()[branch_idx]];
+          Q[context_idx_].scoredBranches[i].second = Q[context_idx_].dist[bid] + seen[bid];
+          seen[bid] += 1;
+        }
+      }
+      // fprintf(stderr, "\n");
+      fprintf(stderr, "before sort\n");
+      stable_sort(Q[context_idx_].scoredBranches.begin(), Q[context_idx_].scoredBranches.end(), ScoredBranchComp());
+      fprintf(stderr, "after sort\n");
+      // auto end = std::chrono::high_resolution_clock::now();
+      // elapsed_time_searching_6_ += (end - start);
+      // fprintf(stderr, "elapsed_time_searching_6(scored branch calculate) : %.2f\n", elapsed_time_searching_6_.count() );
+      fprintf(stderr, "here bbb\n", Q[context_idx_].cur_ex.path().constraints().size());
+    } else {
+      fprintf(stderr, "scoredBranches is not empty\n");
+    }
+
+    // Solve.
+    SymbolicExecution new_ex;
+    vector<value_t> input;
+    // for (size_t i = 0; i < scoredBranches.size(); i++) {
+    while(Q[context_idx_].cur_idx < Q[context_idx_].scoredBranches.size()) {
+
+
+      fprintf(stderr, "iters = %u\n", Q[context_idx_].iters);
+      if ((Q[context_idx_].iters <= 0) ||
+       (Q[context_idx_]
+         .scoredBranches[Q[context_idx_]
+         .cur_idx]
+         .second > kInfiniteDistance)) {
+            Q[context_idx_].searching_branches.clear();
+            Q[context_idx_].is_do_search_failed = true;
+            fprintf(stderr, " is do search failed\n");
+            return false;
+      }
+      num_inner_solves_ ++;
+
+      if (!SolveAtBranch(Q[context_idx_].cur_ex, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].first, &input)) { // Unsat
+        // fprintf(stderr, "unsat\n");
+
+        Q[context_idx_].cur_idx++;
+        continue;
+      }
+      RunProgram(input, &new_ex);
+      Q[context_idx_].iters--;
+      // fprintf(stderr, "iters = %d\n", Q[context_idx_].iters);
+
+      size_t b_idx = Q[context_idx_].cur_ex.path().constraints_idx()[Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].first];
+      branch_id_t bid = paired_branch_[Q[context_idx_].cur_ex.path().branches()[b_idx]];
+      // auto start = std::chrono::high_resolution_clock::now();
+      bool found_new_branch = UpdateCoverage(new_ex, &(Q[context_idx_].new_branches), Q[context_idx_]);
+      // auto end = std::chrono::high_resolution_clock::now();
+      // elapsed_time_searching_5_ += (end - start);
+      // fprintf(stderr, "elapsed_time_searching_5 : %.2f\n", elapsed_time_searching_5_.count() );
+      set<branch_id_t> new_target_branches;
+      // fprintf(stderr, "a1\n");
+      GetNewTargetBranches(new_ex, new_target_branches);
+      // fprintf(stderr, "a2\n");
+      if(!new_target_branches.empty()) {
+        fprintf(stderr, "a333a\n");
+        // Q.push_back(Context(new_ex, new_target_branches));
+        // fprintf(stderr,"context_idx_ : %u Q.size() %u\n", context_idx_, Q.size());
+        // single q
+        // fprintf(stderr, "found new target branches\n");
+        // auto start = std::chrono::high_resolution_clock::now();
+        // Context new_context = Context(new_ex, new_target_branches);
+        // Context new_context(new_ex, new_target_branches);
+        // new_context.dist.resize(max_branch_, 0);
+        // new_context.covered = covered_;
+        // Context new_context = Q[context_idx_];
+        // new_context.target_branches = new_target_branches;
+        // Q.insert(Q.begin() + context_idx_, new_context);
+        fprintf(stderr, "a333b\n");
+        fprintf(stderr, "context_idx  = %u\n",context_idx_);
+        Q.insert(Q.begin() + context_idx_, Q[context_idx_]);
+        // Q.emplace(Q.begin()+context_idx);
+        Q[context_idx_].target_branches = new_target_branches;
+
+        fprintf(stderr, "a444\n Q size : %zu\n", Q.size());
+        fprintf(stderr, "a444a q[%u] size : %zu\n", context_idx_,Q[context_idx_].dist.size());
+        fprintf(stderr, "a444b q[%u] size : %zu\n", context_idx_+1, Q[context_idx_+1].dist.size());
+        for(Context &c : Q) {
+          fprintf(stderr, "path size : %zu \n", c.cur_ex.path().constraints().size());
+        }
+        context_idx_++;
+        // fprintf(stderr, "found new target branches2\n");
+        // auto end = std::chrono::high_resolution_clock::now();
+        // elapsed_time_searching_1_ += (end - start);
+        // fprintf(stderr, "elapsed_time_searching_1_: %.5f\n",elapsed_time_searching_1_.count() );
+        // fprintf(stderr,"context_idx_ : %u Q.size() %u\n", context_idx_, Q.size());
+
+        // fprintf(stderr, "start emplace Q\n");
+        // Q.emplace(Q.begin() + context_idx_);
+        // fprintf(stderr, "after emplace Q\n");
+        // Context &new_context = Q[context_idx_];
+        // fprintf(stderr, "start copy after emplace Q\n");
+        // new_context.cur_ex.SetPath(new_ex.path());
+        // fprintf(stderr, "end copy after emplace Q\n");
+      }
+      fprintf(stderr, "a555\n");
+      for(Context &c : Q) {
+        fprintf(stderr, "22 path size : %zu \n", c.cur_ex.path().constraints().size());
+        fprintf(stderr, "22 dist size : %zu \n", c.dist.size());
+      }
+      // context = Q[context_idx_];
+      bool prediction_failed = !CheckPrediction(Q[context_idx_].cur_ex, new_ex, b_idx);
+// fprintf(stderr, "a5\n");
+      if (found_new_branch && prediction_failed) {
+        fprintf(stderr, "Prediction failed~\n");
+        fprintf(stderr, "Found new branch by forcing at "
+  	              "distance %zu (%d) [lucky, pred failed].\n",
+  	      Q[context_idx_].dist[bid], Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second);
+
+        // We got lucky, and can't really compute any further stats
+        // because prediction failed.
+        num_inner_lucky_successes_ ++;
+        num_inner_successes_pred_fail_ ++;
+        fprintf(stderr, " Do Search Success 1 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
+        Q[context_idx_].latest_success_ex.Swap(new_ex);
+        fprintf(stderr, " Do Search Success 2 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
+        // context.latest_success_ex = new_ex;
+        return true;
+      }
+      if (found_new_branch && !prediction_failed) {
+        fprintf(stderr, "cccc context_idx  = %u\n",context_idx_);
+        fprintf(stderr, "Found new branch by forcing at distance %zu (%d).\n",
+  	      Q[context_idx_].dist[bid], Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second);
+
+
+        fprintf(stderr, "DoSearchOnce1\n");
+        size_t min_dist = MinCflDistance(b_idx, new_ex, Q[context_idx_].new_branches);
+        //size_t min_dist = MinCflDistance(b_idx, new_ex, all_new_branches);
+        // Check if we were lucky.
+        // fprintf(stderr, "Find Along\n");
+        if (FindAlongCfg(b_idx, Q[context_idx_].dist[bid], new_ex, Q[context_idx_].new_branches)) {
+        // if (FindAlongCfg(b_idx, context.dist[bid], new_ex, all_new_branches)) {
+        	assert(min_dist <= Q[context_idx_].dist[bid]);
+        	// A legitimate find -- return success.
+        	if (Q[context_idx_].dist[bid] == 0) {
+        	  num_inner_zero_successes_ ++;
+        	} else {
+        	  num_inner_nonzero_successes_ ++;
+        	}
+
+          fprintf(stderr, " Do Search Success b1 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
+        	Q[context_idx_].latest_success_ex.Swap(new_ex);
+
+          fprintf(stderr, " Do Search Success b2 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
+        	return true;
+        } else {
+          fprintf(stderr, "FindAlongCfg False\n");
+        	// We got lucky, but as long as there were no prediction failures,
+        	// we'll finish the CFG search to see if that works, too.
+        	assert(min_dist > Q[context_idx_].dist[bid]);
+        	assert(Q[context_idx_].dist[bid] != 0);
+        	num_inner_lucky_successes_ ++;
+        }
+      }
+
+      if (prediction_failed) {
+        fprintf(stderr, "Prediction failed.\n");
+        if (!found_new_branch) {
+  	      num_inner_pred_fails_ ++;
+           Q[context_idx_].cur_idx++;
+           UpdateCurContext();
+           return false;
+        }
+      }
+      num_top_solves_ ++;
+      num_top_solve_successes_ ++;
+      // fprintf(stderr, "Before GetSearchingBranches size : %u\n", Q[context_idx_].searching_branches.size());
+      assert(Q[context_idx_].searching_branches.size() == 0);
+
+      // start = std::chrono::high_resolution_clock::now();
+      // GetSearchingBranches(bid, context.covered, context.dist ,context.scoredBranches[context.cur_idx].second-1, context.searching_branches);
+      GetSearchingBranches(bid, Q[context_idx_].covered, Q[context_idx_].dist ,Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second-1, Q[context_idx_].searching_branches);
+      // end = std::chrono::high_resolution_clock::now();
+      // elapsed_time_searching_2_ += (end - start);
+      // fprintf(stderr, "elapsed_time_searching_2 : %f\n", elapsed_time_searching_2_.count() );
+      // fprintf(stderr, "After GetSearchingBranches size : %u\n", Q[context_idx_].searching_branches.size());
+      // fprintf(stderr, "size of searching branches : %u\n", Q[context_idx_].searching_branches.size());
+      // fprintf(stderr, "cur searching branches: \n");
+      for(set<branch_id_t>::iterator it = Q[context_idx_].searching_branches.begin(); it!=Q[context_idx_].searching_branches.end(); it++) {
+        // fprintf(stderr, "%d ",*it);
+      }
+      fprintf(stderr, "\n");
+
+      // start = std::chrono::high_resolution_clock::now();
+      for(size_t i = 0 ;i < Q.size(); i++) {
+        if ( i == context_idx_) {
+          continue;
+        }
+        Context &c = Q[i];
+        for(set<branch_id_t>::iterator it = c.searching_branches.begin(); it!=c.searching_branches.end(); it++) {
+          set<branch_id_t>::iterator it2 = Q[context_idx_].searching_branches.find(*it);
+          if( it2 != Q[context_idx_].searching_branches.end()) {
+            fprintf(stderr, "erase %d: \n", *it2);
+            Q[context_idx_].searching_branches.erase(it2);
+          }
+        }
+      }
+      // end = std::chrono::high_resolution_clock::now();
+      // elapsed_time_searching_8_ += (end - start);
+      // fprintf(stderr, "elapsed_time_searching_8(erase searching branches) : %.2f\n", elapsed_time_searching_8_.count() );
+      // }
+      if(!Q[context_idx_].searching_branches.empty()) {
+          // fprintf(stderr, "Searching branches are not empty\n");
+
+        Q[context_idx_].stack_sub_context.push(SubContext(b_idx, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second -1, new_ex));
+        // fprintf(stderr, "Searching branches are not empty 2\n");
+        if (found_new_branch) {
+            Q[context_idx_].latest_success_ex.Swap(new_ex);
+          Q[context_idx_].do_search_once_found_new_branch = true;
+        } else {
+          Q[context_idx_].do_search_once_found_new_branch = false;
+        }
+      } else {
+          // fprintf(stderr, "Searching branches are empty\n");
+          // fprintf(stderr, "Choose Next Branch\n");
+          Q[context_idx_].do_search_once_found_new_branch = false;
+          Q[context_idx_].cur_idx++;
+          UpdateCurContext();
+        // }
+        // context.iters++;
+      }
+      Q[context_idx_].searching_branches.clear();
+      return false;
+    }
+    // context.is_reset = true;
+    // fprintf(stderr,"set context[%d]'s is_dosearch filed true",input_file_idx_);
+    Q[context_idx_].searching_branches.clear();
+    Q[context_idx_].is_do_search_failed = true;
+    fprintf(stderr, " is do search failed2\n");
+    return false;
+  }
+
+
+  bool CfgHeuristicCSSearch::SolveOnePathAlongCfg() {
+    fprintf(stderr, "SolveOnePathAlongCfg\n");
+    // Context &context = Q[context_idx_];
+    stack<SubContext>&stack = Q[context_idx_].stack_sub_context;
+    vector<value_t> input;
+    while(!stack.empty()) {
+      SubContext& sc = stack.top();
+      vector<branch_id_t> path = sc.cur_ex.path().branches();
+      // fprintf(stderr, "stack size : %u\n",stack.size());
+      // fprintf(stderr, "cur_ex constraints size : %u\n", sc.cur_ex.path().constraints().size());
+      // fprintf(stderr, "cur_idx : %u\n",sc.cur_idx);
+      // fprintf(stderr, "next idxs size : %u\n",sc.idxs.size());
+      // fprintf(stderr, "sc.b_idx : %u\n", sc.b_idx);
+      // fprintf(stderr, "dist : %u\n",sc.dist);
+
+      if(sc.idxs.empty()) { // idxs empty means next branches are not found
+        bool found_path = false;
+        // vector<size_t> idxs;
+        {
+          size_t pos = sc.cur_idx + 1;
+          CollectNextBranches(path, &pos, &sc.idxs);
+          // fprintf(stderr, "Branches following %d:", path[sc.cur_idx]);
+          for (size_t j = 0; j < sc.idxs.size(); j++) {
+            //    fprintf(stderr, " %d(%u,%u,%u)", path[sc.idxs[j]], sc.idxs[j],
+            //       context.dist[path[sc.idxs[j]]], context.dist[paired_branch_[path[sc.idxs[j]]]]);
+            if ((Q[context_idx_].dist[path[sc.idxs[j]]] <= sc.dist)
+                || (Q[context_idx_].dist[paired_branch_[path[sc.idxs[j]]]] <= sc.dist))
+              found_path = true;
+          }
+           //  fprintf(stderr, "\n");
+        }
+
+        if (!found_path) {
+
+          stack.pop();
+          if(!stack.empty()) {
+            stack.top().b_idx++;
+          }
+          continue;
+        } else {
+
+       }
+
+        // We will iterate through these indices in some order (random?
+        // increasing order of distance? decreasing?), and try to force and
+        // recurse along each one with distance no greater than max_dist.
+        random_shuffle(sc.idxs.begin(), sc.idxs.end());
+        for(int i = 0 ;i  < sc.idxs.size(); i++) {
+          // fprintf(stderr,"idxs[%d]:%d\n", i, sc.idxs[i]);
+        }
+        // sc.b_idx = 0;
+
+         // should set dist, current index -1,
+
+      } else if (sc.idxs.size() > 0 && sc.b_idx < sc.idxs.size()) {
+        // fprintf(stderr, "b_idx = %u\n", sc.b_idx);
+        // fprintf(stderr, "dist_[%d](%u), sc.dist(%u)\n", sc.idxs[sc.b_idx], dist_[path[sc.idxs[sc.b_idx]]],sc.dist);
+
+        // point next index
+        if((Q[context_idx_].dist[path[sc.idxs[sc.b_idx]]] > sc.dist && (Q[context_idx_].dist[paired_branch_[path[sc.idxs[sc.b_idx]]]] > sc.dist))) {
+            // fprintf(stderr, "dist_[%d](%u) > sc.dist(%u)\n", sc.idxs[sc.b_idx], dist_[path[sc.idxs[sc.b_idx]]],sc.dist);
+            sc.b_idx++;
+            continue;
+        }
+
+        if (Q[context_idx_].dist[path[sc.idxs[sc.b_idx]]] <= sc.dist ) {
+            // fprintf(stderr, "dist_[%d](%u) <= sc.dist(%u)\n", sc.idxs[sc.b_idx], dist_[path[sc.idxs[sc.b_idx]]],sc.dist);
+
+              if(sc.seen.find(sc.b_idx)== sc.seen.end()) {
+                // fprintf(stderr,"not seen %d,push \n", sc.b_idx);
+                sc.seen.insert(sc.b_idx);
+            //    if(sc.dist != 0) {
+                  // fprintf(stderr, "push sub context\n");
+                  stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist -1 , sc.cur_ex));
+                  continue;
+             //   }
+              } else {
+                // fprintf(stderr,"already seen %d\n", sc.b_idx);
+              }
+
+            // sc.b_idx++;
+        }
+
+        // Find the constraint corresponding to branch idxs[*j].
+        SymbolicExecution new_ex;
+        // fprintf(stderr, "sc.idxs[%d]:%d\n",sc.b_idx, sc.idxs[sc.b_idx]);
+        vector<size_t>::const_iterator idx =
+          lower_bound(sc.cur_ex.path().constraints_idx().begin(),
+          sc.cur_ex.path().constraints_idx().end(), sc.idxs[sc.b_idx]);
+        for(int i = 0 ; i < sc.cur_ex.path().constraints_idx().size(); i++) {
+
+          // fprintf(stderr, " constraint[%d] = %d\n", i, sc.cur_ex.path().constraints_idx()[i]);
+        }
+        if ((idx == sc.cur_ex.path().constraints_idx().end()) || (*idx != sc.idxs[sc.b_idx])) {
+          // fprintf(stderr, "branch is concrete\n");
+          sc.b_idx++;
+          continue;  // Branch is concrete.
+        }
+           // fprintf(stderr, "branch is not concrete\n");
+        size_t c_idx = idx - sc.cur_ex.path().constraints_idx().begin();
+        if(Q[context_idx_].dist[paired_branch_[path[sc.idxs[sc.b_idx]]]] <= sc.dist) {
+          if (!SolveAtBranch(sc.cur_ex, c_idx, &input)) {
+           // fprintf(stderr, "unsat\n");
+            //unsat
+            sc.b_idx++;
+            continue;
+          }
+          RunProgram(input, &new_ex);
+          // fprintf(stderr, "RunProgram\n\n");
+          bool found_new_branch = UpdateCoverage(new_ex, Q[context_idx_]);
+          // set<branch_id_t> new_target_branches;
+          // GetNewTargetBranches(new_ex, new_target_branches);
+          // all_target_branches.insert(new_target_branches.begin(),new_target_branches.end());
+          // if(!new_target_branches.empty()) {
+          //   Q.push_back(Context(new_ex, new_target_branches));
+          // }
+          set<branch_id_t> new_target_branches;
+          GetNewTargetBranches(new_ex, new_target_branches);
+          // if(!new_target_branches.empty() && Q.size() < 5) {
+          if(!new_target_branches.empty()) {
+            auto start = std::chrono::high_resolution_clock::now();
+            // Q.push_back(Context(new_ex, new_target_branches));
+            // fprintf(stderr, "found new target branches\n");
+            // fprintf(stderr, "start emplace\n");
+            // Q.emplace(Q.begin() + context_idx_);
+            // fprintf(stderr, "after emplace Q\n");
+            // Context &new_context = Q[context_idx_];
+
+            Context new_context = Context(new_ex, new_target_branches);
+            new_context.dist.resize(max_branch_, 0);
+            new_context.covered = covered_;
+            Q.insert(Q.begin() + context_idx_, new_context);
+            context_idx_++;
+            //
+            // Context new_context = Context(new_ex, new_target_branches);
+            // new_context.dist.resize(max_branch_, 0);
+            // new_context.covered = covered_;
+            // Q.insert(Q.begin() + context_idx_, new_context);
+            //
+            //
+            // context_idx_++;
+
+            // auto end = std::chrono::high_resolution_clock::now();
+            // elapsed_time_searching_1_ += (end - start);
+            // fprintf(stderr, "elapsed_time_searching_1_: %.5f\n",elapsed_time_searching_1_.count() );
+          }
+
+          if(found_new_branch) {
+            Q[context_idx_].latest_success_ex.Swap(new_ex);
+            Q[context_idx_].stack_sub_context = std::stack<SubContext>();
+
+            return true;
+          }
+
+          if (!CheckPrediction(sc.cur_ex, new_ex, sc.idxs[sc.b_idx])) {
+            num_solve_pred_fails_ ++;
+            fprintf(stderr, "Prediction failed\n");
+            sc.b_idx++;
+            return false;
+          }
+             if(sc.seen2.find(sc.b_idx)== sc.seen2.end()) {
+                sc.seen2.insert(sc.b_idx);
+                stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist-1, new_ex));
+                return false;
+              } else {
+                sc.b_idx++;
+              }
+          return false;
+        }
+        sc.b_idx++;
+      } else {
+        stack.pop();
+      }
+    } // end while
+    return false;
+  }
+
+  void CfgHeuristicCSSearch::PrintStats() {
+    fprintf(stderr, "Cfg solves: %u/%u (%u lucky [%u continued], %u on 0's, %u on others,"
+  	  "%u unsats, %u prediction failures)\n",
+  	  (num_inner_lucky_successes_ + num_inner_zero_successes_ + num_inner_nonzero_successes_ + num_top_solve_successes_),
+  	  num_inner_solves_, num_inner_lucky_successes_, (num_inner_lucky_successes_ - num_inner_successes_pred_fail_),
+  	  num_inner_zero_successes_, num_inner_nonzero_successes_,
+  	  num_inner_unsats_, num_inner_pred_fails_);
+    fprintf(stderr, "    (recursive successes: %u)\n", num_inner_recursive_successes_);
+    fprintf(stderr, "Top-level SolveAlongCfg: %u/%u\n",
+  	  num_top_solve_successes_, num_top_solves_);
+    fprintf(stderr, "All SolveAlongCfg: %u/%u  (%u all concrete, %u no paths)\n",
+  	  num_solve_successes_, num_solves_,
+  	  num_solve_all_concrete_, num_solve_no_paths_);
+    fprintf(stderr, "    (sat failures: %u/%u)  (prediction failures: %u) (recursions: %u)\n",
+  	  num_solve_unsats_, num_solve_sat_attempts_,
+  	  num_solve_pred_fails_, num_solve_recurses_);
+  }
+
+  size_t CfgHeuristicCSSearch::MinCflDistance
+  (size_t i, const SymbolicExecution& ex, const set<branch_id_t>& bs) {
+
+    const vector<branch_id_t>& p = ex.path().branches();
+
+    if (i >= p.size())
+    return numeric_limits<size_t>::max();
+
+    if (bs.find(p[i]) != bs.end())
+    return 0;
+
+    vector<size_t> stack;
+    size_t min_dist = numeric_limits<size_t>::max();
+    size_t cur_dist = 1;
+
+    fprintf(stderr, "Found uncovered branches at distances:");
+    for (BranchIt j = p.begin()+i+1; j != p.end(); ++j) {
+      if (bs.find(*j) != bs.end()) {
+        min_dist = min(min_dist, cur_dist);
+        fprintf(stderr, " %zu", cur_dist);
+      }
+
+      if (*j >= 0) {
+        cur_dist++;
+      } else if (*j == kCallId) {
+        stack.push_back(cur_dist);
+      } else if (*j == kReturnId) {
+        if (stack.size() == 0)
+        break;
+        cur_dist = stack.back();
+        stack.pop_back();
+      } else {
+        fprintf(stderr, "\nBad branch id: %d\n", *j);
+        exit(1);
+      }
+    }
+
+    fprintf(stderr, "\n");
+    return min_dist;
+  }
+
+  bool CfgHeuristicCSSearch::FindAlongCfg(size_t i, unsigned int dist,
+  				      const SymbolicExecution& ex,
+  				      const set<branch_id_t>& bs) {
+    const vector<branch_id_t>& path = ex.path().branches();
+    // fprintf(stderr,"findalongcfg\n");
+
+    if (i >= path.size())
+      return false;
+
+    branch_id_t bid = path[i];
+    if (bs.find(bid) != bs.end())
+      return true;
+
+    if (dist == 0)
+      return false;
+
+    // Compute the indices of all branches on the path that immediately
+    // follow the current branch (corresponding to the i-th constraint)
+    // in the CFG. For example, consider the path:
+    //     * ( ( ( 1 2 ) 4 ) ( 5 ( 6 7 ) ) 8 ) 9
+    // where '*' is the current branch.  The branches immediately
+    // following '*' are : 1, 4, 5, 8, and 9.
+    vector<size_t> idxs;
+    { size_t pos = i + 1;
+      CollectNextBranches(path, &pos, &idxs);
+    }
+
+    for (vector<size_t>::const_iterator j = idxs.begin(); j != idxs.end(); ++j) {
+      if (FindAlongCfg(*j, dist-1, ex, bs))
+        return true;
+    }
+
+    return false;
+  }
+  void CfgHeuristicCSSearch::SkipUntilReturn(const vector<branch_id_t> path, size_t* pos) {
+    while ((*pos < path.size()) && (path[*pos] != kReturnId)) {
+      if (path[*pos] == kCallId) {
+        (*pos)++;
+        SkipUntilReturn(path, pos);
+        if (*pos >= path.size())
+  	return;
+        assert(path[*pos] == kReturnId);
+      }
+      (*pos)++;
+    }
+  }
+  void CfgHeuristicCSSearch::CollectNextBranches
+  (const vector<branch_id_t>& path, size_t* pos, vector<size_t>* idxs) {
+    // Eat an arbitrary sequence of call-returns, collecting inside each one.
+    while ((*pos < path.size()) && (path[*pos] == kCallId)) {
+      (*pos)++;
+      CollectNextBranches(path, pos, idxs);
+      SkipUntilReturn(path, pos);
+      if (*pos >= path.size())
+        return;
+      assert(path[*pos] == kReturnId);
+      (*pos)++;
+    }
+
+    // If the sequence of calls is followed by a branch, add it.
+    if ((*pos < path.size()) && (path[*pos] >= 0)) {
+      idxs->push_back(*pos);
+      (*pos)++;
+      return;
+    }
+
+    // Alternatively, if the sequence is followed by a return, collect the branches
+    // immediately following the return.
+    /*
+    if ((*pos < path.size()) && (path[*pos] == kReturnId)) {
+      (*pos)++;
+      CollectNextBranches(path, pos, idxs);
+    }
+    */
+  }
+  bool CfgHeuristicCSSearch::DoBoundedBFS(int i, int depth, const SymbolicExecution& prev_ex) {
+    if (depth <= 0)
+      return false;
+
+    fprintf(stderr, "%d (%d: %d) (%d: %d)\n", depth,
+            i-1, prev_ex.path().branches()[prev_ex.path().constraints_idx()[i-1]],
+            i, prev_ex.path().branches()[prev_ex.path().constraints_idx()[i]]);
+
+    SymbolicExecution cur_ex;
+    vector<value_t> input;
+    const vector<SymbolicPred*>& constraints = prev_ex.path().constraints();
+    for (size_t j = static_cast<size_t>(i); j < constraints.size(); j++) {
+      if (!SolveAtBranch(prev_ex, j, &input)) {
+        continue;
+      }
+
+      RunProgram(input, &cur_ex);
+      iters_left_--;
+      Context c;
+      if (UpdateCoverage(cur_ex, c)) {
+        success_ex_.Swap(cur_ex);
+        return true;
+      }
+
+      if (!CheckPrediction(prev_ex, cur_ex, prev_ex.path().constraints_idx()[j])) {
+        fprintf(stderr, "Prediction failed!\n");
+        continue;
+      }
+
+      return (DoBoundedBFS(j+1, depth-1, cur_ex)
+  	    || DoBoundedBFS(j+1, depth-1, prev_ex));
+    }
+
+    return false;
+  }
 
 }  // namespace crest

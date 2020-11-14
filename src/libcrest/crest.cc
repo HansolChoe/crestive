@@ -10,9 +10,12 @@
 
 #include <assert.h>
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <sys/time.h>
 #include <vector>
+
+#include <chrono>
 
 #include <stdlib.h>
 
@@ -24,6 +27,7 @@ using namespace crest;
 
 // The symbolic interpreter. */
 static SymbolicInterpreter* SI;
+
 
 // Have we read an input yet?  Until we have, generate only the
 // minimal instrumentation necessary to track which branches were
@@ -52,63 +56,93 @@ string __crest_input_file_name;
 
 static void __CrestAtExit();
 
+std::chrono::time_point<std::chrono::high_resolution_clock> start;
+std::chrono::time_point<std::chrono::high_resolution_clock> end;
+std::chrono::duration<double> time_init;
+std::chrono::duration<double> time_exit;
+std::chrono::duration<double> time_atexit;
+
+
+void myatexit() {
+  end = std::chrono::high_resolution_clock::now();
+  time_atexit = (end - start);
+  // setenv("CREST_TIME_3", std::to_string(time_atexit.count()).c_str() , 1);
+  fprintf(stderr, "time_atexit: %.5f\n",time_atexit.count() );
+
+  FILE *f = fopen("time", "w");
+
+  fprintf(f , "%lf\n", time_init.count());
+  fprintf(f , "%lf\n", time_exit.count());
+  fprintf(f , "%lf\n", time_atexit.count());
+
+  fclose(f);
+}
 void __CrestInit() {
+  start = std::chrono::high_resolution_clock::now();
   // Initialize the random number generator.
   struct timeval tv;
   gettimeofday(&tv, NULL);
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
 
-
-  /*
-  // Read the input.
-  vector<value_t> input;
-  std::ifstream in("input");
-  value_t val;
-  while (in >> val) {
-    input.push_back(val);
-  }
-  in.close();
-  */
   __crest_input_file_name = std::string(getenv("CREST_INPUT_FILE_NAME")).c_str();
   if(__crest_input_file_name.empty()) {
      fprintf(stderr, "libcrest: An input file is not specified\n");
      exit(1);
   }
-
-  // fprintf(stderr, "libcrest: inputs/%s\n", __crest_input_file_name.c_str());
+  fprintf(stderr, "input file : %s \n", __crest_input_file_name.c_str());
   vector<value_t> input;
-  std::ifstream in(((std::string("inputs/") + __crest_input_file_name)).c_str());
+  std::ifstream in(__crest_input_file_name.c_str());
   value_t val;
-//  fprintf(stderr, "Inputs:");
   while (in >> val) {
-//    fprintf(stderr, "%d", val);
+    // fprintf(stderr, "%lld ", val);
     input.push_back(val);
   }
-//  fprintf(stderr, "\n");
+  // fprintf(stderr, "\n", val);
   in.close();
+  end = std::chrono::high_resolution_clock::now();
+  time_init = (end - start);
+  fprintf(stderr, "time_init: %.5f\n",time_init.count() );
+  // setenv("CREST_TIME_1", std::to_string(time_init.count()).c_str() , 1);
 
+  start = std::chrono::high_resolution_clock::now();
   SI = new SymbolicInterpreter(input);
+
 
   pre_symbolic = 1;
 
+  atexit(myatexit);
   assert(!atexit(__CrestAtExit));
 }
 
 
 void __CrestAtExit() {
-  const SymbolicExecution& ex = SI->execution();
+  end = std::chrono::high_resolution_clock::now();
+  time_exit = (end - start);
+  // setenv("CREST_TIME_2", std::to_string(time_exit.count()).c_str() , 1);
+  // fprintf(stderr,"CREST_TIME_2 : %s\n", std::to_string(time_exit.count()).c_str());
+  fprintf(stderr, "time_exit: %.5f\n",time_exit.count() );
 
+
+  start = std::chrono::high_resolution_clock::now();
+  const SymbolicExecution& ex = SI->execution();
   // Write the execution out to file 'szd_execution'.
   string buff;
   buff.reserve(1<<26);
   ex.Serialize(&buff);
-  std::string szd_execution_name = std::string("se/ex_") + __crest_input_file_name;
+  delete SI;
+  // std::string szd_execution_name = std::string("se/ex_") + __crest_input_file_name;
   // std::ofstream out("szd_execution", std::ios::out | std::ios::binary);
   // printf("write %s\n", szd_execution_name.c_str());
-  std::ofstream out(szd_execution_name, std::ios::out | std::ios::binary);
+  // std::ofstream out(szd_execution_name, std::ios::out | std::ios::binary);
+
+  std::ofstream out("szd_execution", std::ios::out | std::ios::binary);
   out.write(buff.data(), buff.size());
   assert(!out.fail());
   out.close();
+
+
+
+
 }
 
 

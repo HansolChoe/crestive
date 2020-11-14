@@ -40,7 +40,7 @@ class SymbolicExpr {
 
   // Copy constructor.
   SymbolicExpr(const SymbolicExpr& e);
-
+  
   // Desctructor.
   ~SymbolicExpr();
 

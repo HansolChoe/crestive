@@ -31,12 +31,13 @@ class SymbolicPath {
   SymbolicPath();
   SymbolicPath(const SymbolicPath& sp);
   SymbolicPath& operator=(const SymbolicPath& sp);
+  SymbolicPath& operator=( SymbolicPath&& move);
+  SymbolicPath(SymbolicPath&& move);
   // SymbolicPath& operator==(const SymbolicPath& sp);
   SymbolicPath(bool pre_allocate);
   ~SymbolicPath();
 
   void Swap(SymbolicPath& sp);
-
 
   void Push(branch_id_t bid);
   void Push(branch_id_t bid, SymbolicPred* constraint);
@@ -47,10 +48,10 @@ class SymbolicPath {
   const vector<SymbolicPred*>& constraints() const { return constraints_; }
   const vector<size_t>& constraints_idx() const { return constraints_idx_; }
 
- private:
   vector<branch_id_t> branches_;
   vector<size_t> constraints_idx_;
   vector<SymbolicPred*> constraints_;
+ private:
 };
 
 }  // namespace crest

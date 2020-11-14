@@ -33,13 +33,31 @@ typedef map<addr_t,SymbolicExpr*>::const_iterator ConstMemIt;
 
 SymbolicInterpreter::SymbolicInterpreter()
   : pred_(NULL), return_value_(false), ex_(true), num_inputs_(0) {
+    // start = std::chrono::high_resolution_clock::now();
   stack_.reserve(16);
 }
 
 SymbolicInterpreter::SymbolicInterpreter(const vector<value_t>& input)
   : pred_(NULL), return_value_(false), ex_(true), num_inputs_(0) {
+    // start = std::chrono::high_resolution_clock::now();
   stack_.reserve(16);
   ex_.mutable_inputs()->assign(input.begin(), input.end());
+}
+
+SymbolicInterpreter::~SymbolicInterpreter() {
+ //  end = std::chrono::high_resolution_clock::now();
+ //  SI_time = (end - start);
+ // FILE* f = fopen("si_time", "a");
+ // if (!f) {
+ //   fprintf(stderr, "Failed to open %s.\n", "si_time");
+ //   perror("Error: ");
+ //   exit(-1);
+ // }
+ // // for (size_t i = 0; i < input.size(); i++) {
+ // //   fprintf(f, "%lld\n", input[i]);
+ // // }
+ // fprintf(f , "%.4f\n", SI_time.count());
+ // fclose(f);
 }
 
 void SymbolicInterpreter::DumpMemory() {
@@ -86,7 +104,10 @@ void SymbolicInterpreter::Load(id_t id, addr_t addr, value_t value) {
   if (it == mem_.end()) {
     PushConcrete(value);
   } else {
-    PushSymbolic(new SymbolicExpr(*it->second), value);
+    // SymbolicExpr * SymExpr = new SymbolicExpr(*it->second);
+    // PushSymbolic(SymExpr, value);
+    PushSymbolic(std::move(new SymbolicExpr(*it->second)), value);
+    // delete SymExpr;
   }
   ClearPredicateRegister();
   IFDEBUG(DumpMemory());

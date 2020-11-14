@@ -28,8 +28,12 @@ namespace crest {
 class SymbolicPred {
  public:
   SymbolicPred();
+
   SymbolicPred(const SymbolicPred& sp);
+  // SymbolicPred (const SymbolicPred& sp);
+  SymbolicPred (SymbolicPred &&move);
   SymbolicPred& operator=(const SymbolicPred& sp);
+  SymbolicPred& operator=(SymbolicPred &&other);
   SymbolicPred(compare_op_t op, SymbolicExpr* expr);
   ~SymbolicPred();
 

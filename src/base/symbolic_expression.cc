@@ -18,18 +18,38 @@ typedef map<var_t,value_t>::iterator It;
 typedef map<var_t,value_t>::const_iterator ConstIt;
 
 
-SymbolicExpr::~SymbolicExpr() { }
+SymbolicExpr::~SymbolicExpr() {
+// fprintf(stderr, "SymbolicExpr: Destructor called\n");
+ }
 
 SymbolicExpr::SymbolicExpr() : const_(0) { }
 
-SymbolicExpr::SymbolicExpr(value_t c) : const_(c) { }
+SymbolicExpr::SymbolicExpr(value_t c) : const_(c) {
+
+ }
 
 SymbolicExpr::SymbolicExpr(value_t c, var_t v) : const_(0) {
   coeff_[v] = c;
 }
 
 SymbolicExpr::SymbolicExpr(const SymbolicExpr& e)
-  : const_(e.const_), coeff_(e.coeff_) { }
+  : const_(e.const_), coeff_(e.coeff_) {
+    fprintf(stderr, "SymbolicExpr copy constructor \n");
+
+   }
+
+// SymbolicExpr::SymbolicExpr(const SymbolicExpr& e)
+//  {
+//    fprintf(stderr, "SymbolicExpr copy constructor \n");
+//    const_ = e.const_;
+//    coeff_ = e.coeff_;
+// }
+//
+//   SymbolicExpr& SymbolicExpr::operator=(const SymbolicExpr& e) {
+//     fprintf(stderr, "SymbolicExpr : operator=\n");
+// const_ = e.const_;
+// coeff_ = e.coeff_;
+//   }
 
 
 void SymbolicExpr::Negate() {

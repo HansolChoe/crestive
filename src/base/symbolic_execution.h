@@ -29,8 +29,11 @@ namespace crest {
 class SymbolicExecution {
  public:
   SymbolicExecution();
+
   SymbolicExecution(const SymbolicExecution& se);
   SymbolicExecution& operator=(const SymbolicExecution& rhs);
+  SymbolicExecution& operator=(SymbolicExecution&& rhs);
+  SymbolicExecution(SymbolicExecution &&move);
   explicit SymbolicExecution(bool pre_allocate);
   ~SymbolicExecution();
 

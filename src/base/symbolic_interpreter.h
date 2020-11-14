@@ -16,6 +16,7 @@
 #include <ext/hash_map>
 #include <map>
 #include <vector>
+#include <chrono>
 
 #include "base/basic_types.h"
 #include "base/symbolic_execution.h"
@@ -30,9 +31,15 @@ using __gnu_cxx::hash_map;
 
 namespace crest {
 
+
+
 class SymbolicInterpreter {
  public:
+  // std::chrono::duration<double> SI_time;
+
+
   SymbolicInterpreter();
+  ~SymbolicInterpreter();
   explicit SymbolicInterpreter(const vector<value_t>& input);
 
   void ClearStack(id_t id);

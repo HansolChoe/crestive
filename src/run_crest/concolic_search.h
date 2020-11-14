@@ -22,6 +22,7 @@
 #include <chrono>
 
 #include <functional>
+#include <iostream>
 
 /*
 #include <sys/types.h>
@@ -62,15 +63,233 @@ namespace {
   };
 }  // namespace
 
-class Search {
 
+
+class SubContext {
+public:
+  SubContext(size_t cur_idx_, size_t dist_, SymbolicExecution &ex_) {
+    b_idx = 0;
+    cur_idx = cur_idx_;
+    dist = dist_;
+    // execution copy
+    // fprintf(stderr, "sub context copy start\n");
+    cur_ex = ex_;
+    // fprintf(stderr, "sub context copy end\n");
+    // fprintf(stderr, "b cur_ex size = %u, ex size = %u\n", cur_ex.path().constraints().size(), ex_.path().constraints().size());
+  }
+  SymbolicExecution cur_ex;
+  size_t cur_idx;
+  size_t b_idx;
+  vector<size_t> idxs;
+  size_t dist;
+  set<size_t> seen;
+  set<size_t> seen2;
+ };
+
+ // class EXContext {
+ // public:
+ //   EXContext(SymbolicExecution _e, set<branch_id_t> _t) {
+ //     ex = _e;
+ //     target_branches = _t;
+ //   }
+ //   SymbolicExecution ex;
+ //   set<branch_id_t> target_branches;
+ // };
+class Context {
+public:
+
+
+  ~Context()  {
+    fprintf(stderr, "destruct Context\n");
+    // cur_ex = std::move(m.cur_ex);
+  }
+
+
+  // Context& operator=(Context &&other) noexcept {
+  //   fprintf(stderr, "move~\n");
+  //   if (this != &other) {
+  //     fprintf(stderr, "here\n");
+  //   }
+  //   return *this;
+  // }
+
+
+  void PrintPathConstraint(const SymbolicPath &sym_path) {
+    string tmp;
+    if (sym_path.constraints().size() == 0) {
+      std::cerr << "(Empty)" << std::endl;
+      return;
+    }
+    for (size_t i = 0; i < sym_path.constraints().size(); i++) {
+      tmp.clear();
+      size_t b_idx = sym_path.constraints_idx()[i];
+      branch_id_t bid = sym_path.branches()[b_idx];
+      sym_path.constraints()[i]->AppendToString(&tmp);
+      std::cerr << i << "("<<bid << "): " << tmp << '\n';
+    }
+  }
+  Context() {
+    fprintf(stderr, "Context constructor (no parama)\n");
+    is_reset = false;
+    cur_idx = 0;
+    is_do_search_failed = false;
+    do_search_once_found_new_branch = false;
+    energy = 0;
+    iters = 30;
+    num_covered = 0;
+  }
+  Context(SymbolicExecution &_e, set<branch_id_t> _target_branches) {
+    fprintf(stderr, " Context constructor start\n");
+    cur_ex = _e;
+    fprintf(stderr, " Context constructor end\n");
+
+
+    // PrintPathConstraint(cur_ex.path());
+    target_branches = _target_branches;
+    is_reset = false;
+    cur_idx = 0;
+    is_do_search_failed = false;
+    do_search_once_found_new_branch = false;
+    energy = 0;
+    iters = 30;
+    num_covered = 0;
+    // fprintf(stderr, " Context constructor end\n");
+  }
+
+  Context& operator=(const Context &m) {
+    fprintf(stderr, "se operator=\n");
+    if ( this != &m) {
+      // cur_ex = std::move(m.cur_ex);
+      cur_ex = std::move(m.cur_ex);
+      latest_success_ex = std::move(m.latest_success_ex);
+
+      stack_sub_context = std::move(m.stack_sub_context);
+
+      covered = std::move(m.covered);
+      dist = std::move(m.dist);
+      // fprintf(stderr, "dist size : %zu %n", dist.size());
+      new_branches = std::move(m.new_branches);
+      target_branches = std::move(m.target_branches);
+      target_branches = std::move(m.searching_branches);
+      scoredBranches = std::move(m.scoredBranches);
+
+      num_covered = m.num_covered;
+      iters = m.iters;
+      energy = m.energy;
+      cur_idx = m.cur_idx;
+      is_do_search_failed = m.is_do_search_failed;
+
+
+      // context_idx_ = m.context_idx_;
+      fprintf(stderr, "m.iters = %u\n", m.iters);
+      fprintf(stderr, "iters = %u\n", iters);
+      // m.iters = 0;
+      // m.num_covered = 0;
+      // m.energy = 0;
+      // m.cur_idx = 0;
+    }
+    return *this;
+  }
+
+
+
+  Context(Context &&m)  {
+
+    fprintf(stderr, "move Context\n");
+    cur_ex = std::move(m.cur_ex);
+    latest_success_ex = std::move(m.latest_success_ex);
+
+    stack_sub_context = std::move(m.stack_sub_context);
+
+    covered = std::move(m.covered);
+    dist = std::move(m.dist);
+    // fprintf(stderr, "dist size : %zu %n", dist.size());
+    new_branches = std::move(m.new_branches);
+    target_branches = std::move(m.target_branches);
+    target_branches = std::move(m.searching_branches);
+    scoredBranches = std::move(m.scoredBranches);
+
+    num_covered = m.num_covered;
+    iters = m.iters;
+    energy = m.energy;
+    cur_idx = m.cur_idx;
+    is_do_search_failed = m.is_do_search_failed;
+
+
+    // context_idx_ = m.context_idx_;
+    fprintf(stderr, "m.iters = %u\n", m.iters);
+    fprintf(stderr, "iters = %u\n", iters);
+    m.iters = 0;
+    m.num_covered = 0;
+    m.energy = 0;
+    m.cur_idx = 0;
+  }
+
+
+
+
+
+  Context(const Context &m) {
+    fprintf(stderr, "context copy\n");
+    cur_ex = m.cur_ex;
+    latest_success_ex = m.latest_success_ex;
+
+    stack_sub_context = m.stack_sub_context;
+
+    covered = m.covered;
+    dist = m.dist;
+    fprintf(stderr, "dist size : %zu , %zu\n", dist.size(), m.dist.size());
+    new_branches = m.new_branches;
+    target_branches = m.target_branches;
+    searching_branches = m.searching_branches;
+    scoredBranches = m.scoredBranches;
+
+    num_covered = m.num_covered;
+    iters = m.iters;
+    energy = m.energy;
+    cur_idx = m.cur_idx;
+    is_do_search_failed = m.is_do_search_failed;
+    fprintf(stderr, "context copy finished\n");
+    fprintf(stderr, "scored_branches size : %zu , %zu\n", scoredBranches.size(), m.scoredBranches.size());
+    // fprintf(stderr, "scored_branches size : %u\n");
+  }
+
+  size_t energy;
+  set<branch_id_t> target_branches;
+  set<branch_id_t> searching_branches;
+  vector<ScoredBranch> scoredBranches;
+  SymbolicExecution cur_ex;
+  SymbolicExecution latest_success_ex;
+  size_t cur_idx;
+  bool is_reset;
+  stack<SubContext> stack_sub_context;
+  int iters;
+  bool do_search_once_found_new_branch;
+  bool is_do_search_failed;
+  vector<bool> covered;
+  vector<size_t> dist;
+  unsigned int num_covered;
+  set<branch_id_t> new_branches;
+ };
+
+class Search {
  public:
   Search(const string& program, int max_iterations);
   virtual ~Search();
 
   virtual void Run() = 0;
 
+  void SetIsSaveTestcasesOption(bool is_save_testcases_option) {
+    is_save_testcases_option_ = is_save_testcases_option;
+  }
+    void RunDirectory(const char *input_directory_name);
+    void PrintPathConstraint(const SymbolicPath &symbolic_path);
  protected:
+  double t1;
+  double t2;
+  double t3;
+
+  size_t error_count;
   vector<branch_id_t> branches_;
   vector<branch_id_t> paired_branch_;
   vector<function_id_t> branch_function_;
@@ -79,6 +298,7 @@ class Search {
   branch_id_t max_branch_;
   unsigned int num_covered_;
   unsigned int total_num_covered_;
+  bool is_save_testcases_option_;
 
   vector<bool> reached_;
   vector<unsigned int> branch_count_;
@@ -93,8 +313,22 @@ class Search {
   std::chrono::high_resolution_clock::time_point begin_total_;
   std::chrono::high_resolution_clock::time_point end_total_;
   std::chrono::duration<double> elapsed_time_total_;
-
-
+  std::chrono::duration<double> elapsed_time_searching_1_;
+  std::chrono::duration<double> elapsed_time_searching_2_;
+  std::chrono::duration<double> elapsed_time_searching_3_;
+  std::chrono::duration<double> elapsed_time_searching_4_;
+  std::chrono::duration<double> elapsed_time_searching_5_;
+  std::chrono::duration<double> elapsed_time_searching_6_;
+  std::chrono::duration<double> elapsed_time_searching_7_;
+  std::chrono::duration<double> elapsed_time_searching_8_;
+  std::chrono::duration<double> elapsed_time_searching_9_;
+  std::chrono::duration<double> elapsed_time_searching_10_;
+  std::chrono::duration<double> elapsed_time_searching_11_;
+  std::chrono::duration<double> elapsed_time_solving_;
+  std::chrono::duration<double> elapsed_time_program_;
+  std::chrono::duration<double> elapsed_time_copy_;
+  std::chrono::duration<double> elapsed_time_update_;
+  std::chrono::duration<double> elapsed_time_szd_read_;
   typedef vector<branch_id_t>::const_iterator BranchIt;
 
   bool SolveAtBranch(const SymbolicExecution& ex,
@@ -130,7 +364,7 @@ class Search {
   int num_prediction_fail_;
  private:
   int time_out_;
-
+SymbolicExecution run_ex;
   /*
   struct sockaddr_un sock_;
   int sockd_;
@@ -300,48 +534,18 @@ class CfgBaselineSearch : public Search {
 };
 
 
-class SubContext {
-public:
-  SubContext(size_t cur_idx_, size_t dist_, SymbolicExecution &ex_) {
-    b_idx = 0;
-    cur_idx = cur_idx_;
-    dist = dist_;
-    // execution copy
-    cur_ex = ex_;
-    // fprintf(stderr, "b cur_ex size = %u, ex size = %u\n", cur_ex.path().constraints().size(), ex_.path().constraints().size());
-  }
-  SymbolicExecution cur_ex;
-  size_t cur_idx;
-  size_t b_idx;
-  vector<size_t> idxs;
-  size_t dist;
-  set<size_t> seen;
-  set<size_t> seen2;
- };
 
-class Context {
-public:
-  Context() {
-    is_reset = true;
-    cur_idx = 0;
-    is_do_search_failed = false;
-    do_search_once_found_new_branch = false;
-  }
-  set<branch_id_t> target_branches;
-  vector<ScoredBranch> scoredBranches;
-  SymbolicExecution cur_ex;
-  SymbolicExecution latest_success_ex;
-  size_t cur_idx;
-  bool is_reset;
-  stack<SubContext> stack_sub_context;
-  int iters;
-  bool do_search_once_found_new_branch;
-  bool is_do_search_failed;
-  vector<bool> covered;
-  vector<size_t> dist;
-  unsigned int num_covered;
-  set<branch_id_t> new_branches;
- };
+ // class EXContext {
+ // public:
+ //   EXContext(SymbolicExecution _e, set<branch_id_t> _t) {
+ //     ex = _e;
+ //     target_branches = _t;
+ //     energy = 0;
+ //   }
+ //   SymbolicExecution ex;
+ //   set<branch_id_t> target_branches;
+ // };
+
 
 class CfgHeuristicESSearch : public Search {
  public:
@@ -349,6 +553,7 @@ class CfgHeuristicESSearch : public Search {
   virtual ~CfgHeuristicESSearch();
 
   virtual void Run();
+protected:
   bool UpdateCoverage(const SymbolicExecution& ex, Context &context);
   bool UpdateCoverage(const SymbolicExecution& ex,
 		      set<branch_id_t>* new_branches, Context &context);
@@ -356,7 +561,7 @@ class CfgHeuristicESSearch : public Search {
 
  private:
   // vector<SymbolicExecution> v_ex_;
-  void GetTargetBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist, size_t depth, set<branch_id_t> &t);
+  void GetSearchingBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist, size_t depth, set<branch_id_t> &t);
   vector<Context> v_context_;
   set<branch_id_t> all_new_branches;
 
@@ -444,7 +649,7 @@ class CfgHeuristicSearch : public Search {
   virtual void Run();
 
  private:
-  // void GetTargetBranches(branch_id_t b, vector<bool> &covered, size_t dist, set<branch_id_t> &t);
+  // void GetSearchingBranches(branch_id_t b, vector<bool> &covered, size_t dist, set<branch_id_t> &t);
   typedef vector<branch_id_t> nbhr_list_t;
   vector<nbhr_list_t> cfg_;
   vector<nbhr_list_t> cfg_rev_;
@@ -501,7 +706,98 @@ class CfgHeuristicSearch : public Search {
 
 
 
+class CfgHeuristicCSSearch : public Search {
+ public:
+  CfgHeuristicCSSearch(const string& program, int max_iterations);
+  virtual ~CfgHeuristicCSSearch();
+  virtual void Run();
+protected:
+
+  set<branch_id_t> covered_branches_;
+  bool UpdateCoverage(const SymbolicExecution& ex, set<branch_id_t> *new_branches, Context &context);
+  bool UpdateCoverage(const SymbolicExecution& ex, Context &context);
+  size_t AssignEnergy(Context &c);
+  void UpdateCurContext();
+  // void UpdateCurContext();
+  // void GetNewTargetBranches(SymbolicExecution &next_ex,set<branch_id_t> &u);
+  void GetNewTargetBranches(SymbolicExecution &next_ex,set<branch_id_t> &u);
+  void GetSearchingBranches(branch_id_t b, vector<bool> &covered, vector<size_t>& dist, size_t depth, set<branch_id_t> &t);
+
+ private:
+   deque<Context> Q;
+   size_t context_idx_;
+  // vector<Context> v_context_;
+  // set<branch_id_t> all_new_branches;
+  // set<branch_id_t> all_target_branches;
+
+  // Context cur_context_;
+  typedef vector<branch_id_t> nbhr_list_t;
+  vector<nbhr_list_t> cfg_;
+  vector<nbhr_list_t> cfg_rev_;
+  vector<size_t> dist_notusing;
+  map<size_t, size_t> pf_count_;
+  static const size_t kInfiniteDistance = 10000;
+
+  int iters_left_;
+
+  SymbolicExecution success_ex_;
+
+  // Stats.
+  unsigned num_inner_solves_;
+  unsigned num_inner_successes_pred_fail_;
+  unsigned num_inner_lucky_successes_;
+  unsigned num_inner_zero_successes_;
+  unsigned num_inner_nonzero_successes_;
+  unsigned num_inner_recursive_successes_;
+  unsigned num_inner_unsats_;
+  unsigned num_inner_pred_fails_;
+
+  unsigned num_top_solves_;
+  unsigned num_top_solve_successes_;
+
+  unsigned num_solves_;
+  unsigned num_solve_successes_;
+  unsigned num_solve_sat_attempts_;
+  unsigned num_solve_unsats_;
+  unsigned num_solve_recurses_;
+  unsigned num_solve_pred_fails_;
+  unsigned num_solve_all_concrete_;
+  unsigned num_solve_no_paths_;
+
+  // void UpdateBranchDistances();
+  // void UpdateBranchDist ances(vector<size_t>& dist);
+  void UpdateBranchDistances(vector<bool>& covered, vector<long unsigned int>& dist);
+  void PrintStats();
+  // bool DoSearch(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
+  // bool DoSearchOnce(int depth, int iters, int pos, int maxDist, const SymbolicExecution& prev_ex);
+  // bool DoSearchOnce(Context& context);
+  // bool SolveOnePathAlongCfg(Context& context);
+  bool DoSearchOnce();
+  bool SolveOnePathAlongCfg();
+  bool DoBoundedBFS(int i, int depth, const SymbolicExecution& prev_ex);
+  void SkipUntilReturn(const vector<branch_id_t> path, size_t* pos);
+
+  bool FindAlongCfg(size_t i, unsigned int dist,
+		    const SymbolicExecution& ex,
+		    const set<branch_id_t>& bs);
+
+  // bool SolveAlongCfg(size_t i, unsigned int max_dist,
+	// 	     const SymbolicExecution& prev_ex);
+
+  void CollectNextBranches(const vector<branch_id_t>& path,
+			   size_t* pos, vector<size_t>* idxs);
+
+  size_t MinCflDistance(size_t i,
+			const SymbolicExecution& ex,
+			const set<branch_id_t>& bs);
+};
+
+class Runner : public Search {
+ public:
+  Runner(const string& program, int max_iterations);
+  virtual ~Runner();
+  virtual void Run();
+};
+
 }  // namespace crest
-
-
 #endif  // RUN_CREST_CONCOLIC_SEARCH_H__

@@ -9,30 +9,67 @@
 // for details.
 
 #include "base/symbolic_predicate.h"
-
+#include <stdio.h>
 namespace crest {
 
 SymbolicPred::SymbolicPred()
-  : op_(ops::EQ), expr_(new SymbolicExpr(0)) { }
+  : op_(ops::EQ), expr_(new SymbolicExpr(0)) {
+    // fprintf(stderr, "SymbolicPred: Constructor\n");
+  }
+
 
 // Redefine copy constructor for deep copying
 SymbolicPred::SymbolicPred(const SymbolicPred& sp) {
-  op_ = sp.op();
-  expr_ = new SymbolicExpr(sp.expr());
+  fprintf(stderr, "SymbolicPred: copy\n");
+  op_ = sp.op_;
+  expr_ = sp.expr_;
 }
 
+// redifine operator= for deep copying
 SymbolicPred& SymbolicPred::operator=(const SymbolicPred& sp) {
+  fprintf(stderr, "copying predicate operator=\n");
+  fprintf(stderr, "SymbolicPred:: copy called\n");
   if(this == &sp) {
     return *this;
   }
-  op_ = sp.op();
-  *expr_ = sp.expr();
+  op_ = sp.op_;
+  expr_ = sp.expr_;
+  // *expr_ = sp.expr();
+  // expr_ = std::move(new SymbolicExpr(sp.expr()));
+  // expr_ = new SymbolicExpr(sp.expr());
 }
+
+SymbolicPred& SymbolicPred::operator=(SymbolicPred &&move) {
+  fprintf(stderr, "SymbolicPred:: mov called\n");
+  if(this== &move) {
+    return *this;
+  }
+  op_ = move.op_;
+  expr_ = std::move(move.expr_);
+  move.expr_ = nullptr;
+}
+
+SymbolicPred::SymbolicPred(SymbolicPred &&move) {
+  fprintf(stderr, "move pred\n");
+  op_ = move.op_;
+  expr_ = std::move(move.expr_);
+  move.expr_ = nullptr;
+
+}
+// SymbolicExecution::SymbolicExecution(SymbolicExecution &&move) {
+//   fprintf(stderr, "move se\n");
+//   // *this = move;
+//   vars_ = std::move(move.vars());
+//   inputs_ = std::move(move.inputs());
+//   path_ = std::move(move.path_);
+//
+// }
 
 SymbolicPred::SymbolicPred(compare_op_t op, SymbolicExpr* expr)
   : op_(op), expr_(expr) { }
 
 SymbolicPred::~SymbolicPred() {
+  // fprintf(stderr, "SymbolicPred: Destructor\n");
   delete expr_;
 }
 
