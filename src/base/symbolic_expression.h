@@ -32,6 +32,8 @@ class SymbolicExpr {
   // Constructs a symbolic expression for the constant 0.
   SymbolicExpr();
 
+  // SymbolicExpr(SymbolicExpr se);
+  void clone(SymbolicExpr *se);
   // Constructs a symbolic expression for the given constant 'c'.
   explicit SymbolicExpr(value_t c);
 
@@ -40,7 +42,7 @@ class SymbolicExpr {
 
   // Copy constructor.
   SymbolicExpr(const SymbolicExpr& e);
-  
+
   // Desctructor.
   ~SymbolicExpr();
 
@@ -68,9 +70,9 @@ class SymbolicExpr {
   const map<var_t,value_t>& terms() const { return coeff_; }
   typedef map<var_t,value_t>::const_iterator TermIt;
 
- private:
   value_t const_;
   map<var_t,value_t> coeff_;
+ private:
 };
 
 }  // namespace crest

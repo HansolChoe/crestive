@@ -29,13 +29,14 @@ namespace crest {
 class SymbolicPath {
  public:
   SymbolicPath();
-  SymbolicPath(const SymbolicPath& sp);
-  SymbolicPath& operator=(const SymbolicPath& sp);
-  SymbolicPath& operator=( SymbolicPath&& move);
-  SymbolicPath(SymbolicPath&& move);
-  // SymbolicPath& operator==(const SymbolicPath& sp);
   SymbolicPath(bool pre_allocate);
   ~SymbolicPath();
+  // SymbolicPath(const SymbolicPath& sp);
+  // SymbolicPath& operator=(const SymbolicPath& sp);
+  // SymbolicPath& operator=( SymbolicPath&& move);
+  // SymbolicPath(SymbolicPath&& move);
+  // SymbolicPath& operator==(const SymbolicPath& sp);
+  void clone(SymbolicPath &path);
 
   void Swap(SymbolicPath& sp);
 

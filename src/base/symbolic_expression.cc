@@ -19,38 +19,40 @@ typedef map<var_t,value_t>::const_iterator ConstIt;
 
 
 SymbolicExpr::~SymbolicExpr() {
-// fprintf(stderr, "SymbolicExpr: Destructor called\n");
- }
+//  fprintf(stderr, "~SymbolicExpr\n");
+}
 
 SymbolicExpr::SymbolicExpr() : const_(0) { }
 
-SymbolicExpr::SymbolicExpr(value_t c) : const_(c) {
+// SymbolicExpr::SymbolicExpr(SymbolicExpr se) {
+//   // fprintf(stderr, "SymbolicExpr copy\n");
+//   const_ = se.const_;
+//   coeff_ = se.coeff_;
+//   // map<var_t,value_t> coeff_;
+// }
 
- }
+SymbolicExpr::SymbolicExpr(value_t c) : const_(c) { }
 
 SymbolicExpr::SymbolicExpr(value_t c, var_t v) : const_(0) {
   coeff_[v] = c;
 }
 
 SymbolicExpr::SymbolicExpr(const SymbolicExpr& e)
-  : const_(e.const_), coeff_(e.coeff_) {
-    fprintf(stderr, "SymbolicExpr copy constructor \n");
+  : const_(e.const_), coeff_(e.coeff_) { }
 
-   }
+void SymbolicExpr::clone(SymbolicExpr *se) {
 
-// SymbolicExpr::SymbolicExpr(const SymbolicExpr& e)
-//  {
-//    fprintf(stderr, "SymbolicExpr copy constructor \n");
-//    const_ = e.const_;
-//    coeff_ = e.coeff_;
+  fprintf(stderr, "clone SymbolicExpr\n");
+  se = new SymbolicExpr(0);
+  se->const_ = const_;
+  se->coeff_ = coeff_;
+}
+// SymbolicExpr *SymbolicExpr::getclone() {
+//   SymbolicExpr *pse = new SymbolicExpr(0);
+//   pse.const_ = const_;
+//   pse.coeff_ = coeff_;
+//   return pse;
 // }
-//
-//   SymbolicExpr& SymbolicExpr::operator=(const SymbolicExpr& e) {
-//     fprintf(stderr, "SymbolicExpr : operator=\n");
-// const_ = e.const_;
-// coeff_ = e.coeff_;
-//   }
-
 
 void SymbolicExpr::Negate() {
   const_ = -const_;

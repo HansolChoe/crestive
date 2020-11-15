@@ -13,165 +13,46 @@
 #include <memory>
 namespace crest {
 
-SymbolicPath::SymbolicPath() { }
+  SymbolicPath::SymbolicPath() { }
 
-// redifine copy constructor for deep copying
-SymbolicPath::SymbolicPath(const SymbolicPath& sp) {
-  fprintf(stderr, "copying SymbolicPath - copy constructor\n");
-  branches_ = sp.branches_;
-  constraints_idx_ = sp.constraints_idx_;
-  constraints_ = vector<SymbolicPred*>(sp.constraints().size());
-  for(size_t i = 0 ; i < sp.constraints().size(); i++) {
-    constraints_[i] = new SymbolicPred(*sp.constraints()[i]);
-    // constraints_[i] = std::move(new SymbolicPred(*sp.constraints()[i]));
-  }
-}
-
-
-
-// redifine operator= for deep copying
-SymbolicPath& SymbolicPath::operator=(const SymbolicPath& sp) {
-  fprintf(stderr, "copying SymbolicPath - operator=\n");
-
-  if(this== &sp) {
-    return *this;
-  }
-  branches_ = sp.branches_;
-  constraints_idx_ = sp.constraints_idx_;
-  fprintf(stderr, "operator = constraints size : %zu\n",sp.constraints().size());
-  // constraints_ = sp.constraints();
-  constraints_ = vector<SymbolicPred*>(sp.constraints().size());
-  for(size_t i = 0 ; i < sp.constraints().size(); i++) {
-    // std::unique_ptr<SymbolicPred> new_sp(new SymbolicPred(*sp.constraints()[i]));
-    // constraints_[i] = &new_sp;
-    constraints_[i] = new SymbolicPred(*sp.constraints()[i]);
-    // *constraints_[i] = *sp.constraints_[i];
-    // constraints_.push_back(new SymbolicPred(*sp.constraints()[i]));
-    // constraints_[i] = std::move(new SymbolicPred(*sp.constraints()[i]));
-  }
-  // std::for_each(constraints_[i].begin(), constraints_[i].end(),)
-}
-
-SymbolicPath::SymbolicPath(SymbolicPath&& move) {
-  fprintf(stderr, "mov SymbolicPath - operator=\n");
-
-  for(size_t i = 0 ; i < constraints_.size(); i++) {
-    fprintf(stderr, "delete constraints %u\n",i);
-    delete constraints_[i];
-    // constraints_[i] = move.constraints()[i];
-  }
-  branches_ = std::move(move.branches_);
-  constraints_idx_ = std::move(move.constraints_idx_);
-  fprintf(stderr, "mov constraints size before %zu\n", move.constraints_.size());
-  constraints_ = vector<SymbolicPred*>(move.constraints().size());
-  for(size_t i = 0 ; i < constraints_.size(); i++) {
-    *constraints_[i] = *move.constraints_[i];
-    move.constraints_[i] = nullptr;
-    // fprintf(stderr, "delete constraints %u\n",i);
-    // delete constraints_[i];
-    // constraints_[i] = move.constraints()[i];
-  }
-  // constraints_ = std::move(move.constraints_);
-
-  // constraints_ = vector<SymbolicPred*>(move.constraints().size());
-  // fprintf(stderr, "constraints size : %zu\n",move.constraints().size());
-  // constraints_ = vector<SymbolicPred *>(move.constraints_.size());
-  // for(size_t i = 0 ; i < move.constraints().size(); i++) {
-  //   // constraints_.push_back(new SymbolicPred(*move.constraints()[i]));
-  //   constraints_[i] = move.constraints_[i];
-  //   move.constraints_[i] = nullptr;
-  //   // constraints_[i] = new SymbolicPred(*move.constraints()[i]);
-  // }
-  // fprintf(stderr, "mov constraints size= %zu\n", move.constraints_.size());
-
-  fprintf(stderr, "mov constraints size= %zu\n", move.constraints_.size());
-}
-
-SymbolicPath& SymbolicPath::operator=( SymbolicPath&& move) {
-  fprintf(stderr, "mov SymbolicPath - operator=\n");
-  if(this== &move) {
-    return *this;
-  }
-  branches_ = std::move(move.branches_);
-  constraints_idx_ = std::move(move.constraints_idx_);
-  fprintf(stderr, "mov constraints size before %zu\n", move.constraints_.size());
-  move.constraints_ = std::move(move.constraints_);
-  // vector<SymbolicPred*> constraints_
-
-  // for(size_t i = 0 ; i < constraints_.size(); i++) {
-  //   fprintf(stderr, "delete constraints %u\n",i);
-  //   delete constraints_[i];
-  //   // constraints_[i] = move.constraints()[i];
-  // }
-  // constraints_
-  // constraints_ = vector<SymbolicPred*>(move.constraints().size());
-  for(size_t i = 0 ; i < constraints_.size(); i++) {
-    // constraints_[i] = move.constraints_[i];
-    // move.constraints_[i] = nullptr;
-    // constraints_[i] = std::move(new SymbolicPred(*move.constraints_[i]));
-    // move.constraints_[i] = nullptr;
-    // constraints_[i] = std::move(new SymbolicPred(*move.constraints_[i]));
-
-
-    // *constraints_[i] = std::move(*move.constraints_[i]);
-    // }
-    //   // delete constraints_[i];
-    //   // constraints_[i] = move.constraints()[i];
+  SymbolicPath::SymbolicPath(bool pre_allocate) {
+    if (pre_allocate) {
+      // To cut down on re-allocation.
+      branches_.reserve(4000000);
+      constraints_idx_.reserve(50000);
+      constraints_.reserve(50000);
+    }
   }
 
-  // constraints_ = std::move(move.constraints_);
-
-  // constraints_ = vector<SymbolicPred*>(move.constraints().size());
-  // fprintf(stderr, "constraints size : %zu\n",move.constraints().size());
-  // constraints_ = vector<SymbolicPred *>(move.constraints_.size());
-  // for(size_t i = 0 ; i < move.constraints().size(); i++) {
-  //   // constraints_.push_back(new SymbolicPred(*move.constraints()[i]));
-  //   constraints_[i] = move.constraints_[i];
-  //   move.constraints_[i] = nullptr;
-  //   // constraints_[i] = new SymbolicPred(*move.constraints()[i]);
-  // }
-  // fprintf(stderr, "mov constraints size= %zu\n", move.constraints_.size());
-
-  fprintf(stderr, "mov constraints size= %zu\n", move.constraints_.size());
-}
-
-
-//
-// void Search::PrintPathConstraint(const SymbolicPath &sym_path) {
-//   string tmp;
-//   if (sym_path.constraints().size() == 0) {
-//     std::cerr << "(Empty)" << std::endl;
-//     return;
-//   }
-//   for (size_t i = 0; i < sym_path.constraints().size(); i++) {
-//     tmp.clear();
-//     size_t b_idx = sym_path.constraints_idx()[i];
-//     branch_id_t bid = sym_path.branches()[b_idx];
-//     sym_path.constraints()[i]->AppendToString(&tmp);
-//     std::cerr << i << "("<<bid << "): " << tmp << '\n';
-//   }
-// }
-
-// redifine equals for path comparison
-// only branches that executed is concerned
-// SymbolicPath& SymbolicPath::operator==(const SymbolicPath& lhs, const SymbolicPath& rhs) {
-  // for(size_t i = 0 ; i < sp.constraints().size(); i++) {
-  //   constraints_[i] = new SymbolicPred(*sp.constraints()[i]);
-  // }
-  // return lhs.branches() == rhs.branches();
-// }
-
-
-SymbolicPath::SymbolicPath(bool pre_allocate) {
-  if (pre_allocate) {
-    // To cut down on re-allocation.
-    branches_.reserve(4000000);
-    constraints_idx_.reserve(50000);
-    constraints_.reserve(50000);
+  // SymbolicPred::SymbolicPred(compare_op_t op, SymbolicExpr* expr)
+  //   : op_(op), expr_(expr) { }
+  //
+  void SymbolicPath::clone(SymbolicPath &path) {
+    // vector<SymbolicPred*> : just copy
+    fprintf(stderr, "SymbolicPath : clone\n");
+    path.branches_ = branches_;
+    // vector<size_t> : just copy
+    path.constraints_idx_ = constraints_idx_;
+    // vector<SymbolicPred*>
+    // allocate new memory and copy it
+    path.constraints_ = vector<SymbolicPred*>(constraints_.size());
+    for(size_t i = 0; i < constraints_.size(); i++) {
+      // path.constraints_[i] = new SymbolicPred(constraints_[i]->op(), constraints_[i]->expr());
+      // path.constraints_[i] = new SymbolicPred();
+      // path.constraints_[i] = new SymbolicPred(constraints_[i]->op(), *constraints_[i]->p_expr());
+      path.constraints_[i] = new SymbolicPred();
+      path.constraints_[i]->op_ = constraints_[i]->op();
+     // delete path.constraints_[i]->expr_;
+     // path.constraints_[i]->expr_ = new SymbolicExpr();
+      path.constraints_[i]->expr_->const_ = constraints_[i]->expr_->const_;
+      path.constraints_[i]->expr_->coeff_ = constraints_[i]->expr_->coeff_;
+    }
+    fprintf(stderr, "SymbolicPath this path size : %zu \n",constraints_.size());
+    fprintf(stderr, "SymbolicPath copied path size : %zu \n",path.constraints_.size());
   }
-}
-
 SymbolicPath::~SymbolicPath() {
+  fprintf(stderr, "SymbolicPath : destructor\n");
+  fprintf(stderr, "free constraints size: %u\n",constraints_.size());
   for (size_t i = 0; i < constraints_.size(); i++)
     delete constraints_[i];
 }
@@ -181,9 +62,6 @@ void SymbolicPath::Swap(SymbolicPath& sp) {
   branches_.swap(sp.branches_);
   constraints_idx_.swap(sp.constraints_idx_);
   constraints_.swap(sp.constraints_);
-  // branches_ = std::move(sp.branches_);
-  // constraints_idx_ = std::move(sp.constraints_idx_);
-  // constraints_.swap(sp.constraints_);
 }
 
 void SymbolicPath::Push(branch_id_t bid) {

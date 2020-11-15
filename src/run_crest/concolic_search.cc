@@ -915,8 +915,10 @@ void Search::RandomInput(const map<var_t,type_t>& vars, vector<value_t>* input) 
 bool Search::SolveAtBranch(const SymbolicExecution& ex,
                            size_t branch_idx,
                            vector<value_t>* input) {
+    fprintf(stderr, "SolveAtBranch branch_idx : %u\n",branch_idx);
 
   const vector<SymbolicPred*>& constraints = ex.path().constraints();
+  fprintf(stderr," SolveAtBranch: constraints size : %zu\n", constraints.size());
   // Optimization: If any of the previous constraints are idential to the
   // branch_idx-th constraint, immediately return false.
   for (int i = static_cast<int>(branch_idx) - 1; i >= 0; i--) {
@@ -1686,9 +1688,10 @@ void CfgHeuristicESSearch::Run() {
       } else {
         // fprintf(stderr,"stack is not empty\n");
         if(!SolveOnePathAlongCfg(context)) {
-          // target branch check
           for(set<branch_id_t>::iterator it=context.searching_branches.begin(); it != context.searching_branches.end(); it++) {
             if(covered_[*it]) {
+                // SearchingBranch, erase
+                // fprintf("Searching Branches, erase context %u Point A\n",context_idx_);
               context.searching_branches.erase(it);
             }
           }
@@ -1952,7 +1955,7 @@ bool CfgHeuristicESSearch::DoSearchOnce(Context& context) {
     if(!context.searching_branches.empty()) {
       // fprintf(stderr, "Target branches are not empty.\n");
       // fprintf(stderr, "Try SolveAlongCfg\n");
-      context.stack_sub_context.push(SubContext(b_idx, context.scoredBranches[context.cur_idx].second -1, new_ex));
+    //  context.stack_sub_context.push(SubContext(b_idx, context.scoredBranches[context.cur_idx].second -1, new_ex));
       if (found_new_branch) {
           context.latest_success_ex.Swap(new_ex);
         context.do_search_once_found_new_branch = true;
@@ -2294,7 +2297,7 @@ bool CfgHeuristicESSearch::SolveOnePathAlongCfg(Context& context) {
               sc.seen.insert(sc.b_idx);
           //    if(sc.dist != 0) {
                 // fprintf(stderr, "push sub context\n");
-                stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist -1 , sc.cur_ex));
+                // stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist -1 , sc.cur_ex));
                 continue;
            //   }
             } else {
@@ -2351,7 +2354,7 @@ bool CfgHeuristicESSearch::SolveOnePathAlongCfg(Context& context) {
            if(sc.seen2.find(sc.b_idx)== sc.seen2.end()) {
               // fprintf(stderr,"not seen2 %d,push \n", sc.b_idx);
               sc.seen2.insert(sc.b_idx);
-              stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist-1, new_ex));
+              // stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist-1, new_ex));
               return false;
             } else {
               // fprintf(stderr,"already seen2 %d\n", sc.b_idx);
@@ -3494,7 +3497,6 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
       fprintf(stderr, "current energy : %u\n", Q[context_idx_].energy);
       // energy is 0
       // check all contexts are marked
-      // context_idx_ = (context_idx_+1) % Q.size();
       fprintf(stderr, "UpdateCurContext 1\n");
       while (Q.size()!=0) {
         fprintf(stderr, "aaa context_idx_ = %u\n", context_idx_);
@@ -3526,6 +3528,7 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
         // cur_context = Q[context_idx_];
         set<branch_id_t> target_branches;
         // fprintf(stderr, "111\n");
+        fprintf(stderr, "target branch size before : %zu\n", context.target_branches.size());
         set_difference(
           context.target_branches.begin(),
           context.target_branches.end(),
@@ -3533,12 +3536,14 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
           covered_branches_.end(),
           std::inserter(target_branches,target_branches.end())
         );
-        fprintf(stderr, "222\n");
+        fprintf(stderr, "target branch size after : %zu\n", target_branches.size());
+        // fprintf(stderr, "222\n");
         if(!target_branches.empty()) {
           // fprintf(stderr, "333\n");
           context.target_branches = target_branches;
           context.energy = AssignEnergy(context);
           // fprintf(stderr, "aaaa num_covered : %u\n", context.num_covered);
+          context.num_covered = num_covered_;
           context.covered = covered_;
           UpdateBranchDistances(context.covered, context.dist);
           // fprintf(stderr, "current energy2 : %u\n", context.energy);
@@ -3548,17 +3553,17 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
           // fprintf(stderr, "elapsed_time_searching_7 : %.5f\n", elapsed_time_searching_7_.count() );
           return;
         } else {
-          fprintf(stderr, "444\n");
-          Q[context_idx_].energy = 0;
           fprintf(stderr, "erase %u\n", context_idx_);
+          context.energy = 0;
+          context.is_do_search_failed = true;
+          // context.target_branches.clear();
           fprintf(stderr, "a Size of Q : %u\n", Q.size());
+          fprintf(stderr, "constraints size : %zu\n", Q[context_idx_].cur_ex.path().constraints().size());
           // Q.erase(Q.begin()+context_idx_);
-          Q[context_idx_].is_do_search_failed = true;
-          Q[context_idx_].target_branches.clear();
-
-          fprintf(stderr, "erase %u end\n", context_idx_);
           fprintf(stderr, "b Size of Q : %u\n", Q.size());
-
+          fprintf(stderr, "constraints size : %zu\n", Q[context_idx_].cur_ex.path().constraints().size());
+          // Q.erase(Q.begin()+context_idx_);
+          fprintf(stderr, "erase %u end\n", context_idx_);
         }
       }
     }
@@ -3632,18 +3637,20 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
             system(s.c_str());
           }
           // RESET global data structures
-          Q.clear();
+          fprintf(stderr, "RESET Search\n");
+          // Q.clear();
+          Q = deque<Context>();
           context_idx_ = 0;
-          covered_branches_.clear();
           pf_count_.clear();
+          covered_branches_.clear();
           covered_.assign(max_branch_, false);
+
+
           Q.emplace_back();
-          Context &new_context = Q.back();
+          Context &new_context = Q.front();
           new_context.covered.resize(max_branch_, false);
           new_context.dist.resize(max_branch_, 0);
-          fprintf(stderr, "After reset : dist size = %zu\n", new_context.dist.size());
           RunProgram(vector<value_t>(), &new_context.cur_ex);
-
           for(BranchIt i = new_context.cur_ex.path().branches().begin(); i!=new_context.cur_ex.path().branches().end(); i++) {
             new_context.target_branches.insert(*i);
           }
@@ -3652,16 +3659,10 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
           } else {
             // fprintf(stderr, "not found new branch\n");
           }
-          // fprintf(stderr, "num covered : %u\n", new_context.num_covered);
+
           UpdateBranchDistances(new_context.covered, new_context.dist);
-          // fprintf(stderr, "b0\n");
-          // Q.push_back(new_context);
-          // cur_context_ = Q[context_idx_];
-          // fprintf(stderr, "b1\n");
           UpdateCurContext();
-          // fprintf(stderr, "b2\n");
         }
-        fprintf(stderr, "Run b\n");
         if(Q[context_idx_].stack_sub_context.empty()) {
           fprintf(stderr, "Run b2\n");
           // auto start = std::chrono::high_resolution_clock::now();
@@ -3670,7 +3671,6 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
             // Context &cur_context = Q[context_idx_];
 
             Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
-
             Q[context_idx_].iters=30;
             Q[context_idx_].cur_idx = 0;
             Q[context_idx_].scoredBranches.clear();
@@ -3686,7 +3686,6 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
             // 2. FindAlongCfg 성공후 stack에 추가
             // 3. Do search fail ( execution 종료)
             if (Q[context_idx_].is_do_search_failed) {
-              // Context &Q[context_idx_] = Q[context_idx_];
               Q[context_idx_].energy = 0;
               fprintf(stderr, "Search failed : skip this context\n");
               fprintf(stderr, "ffff : %u\n", Q[context_idx_].cur_ex.path().constraints().size());
@@ -3705,7 +3704,7 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
             // target branch check
             for(set<branch_id_t>::iterator it=Q[context_idx_].searching_branches.begin(); it != Q[context_idx_].searching_branches.end(); it++) {
               if(covered_[*it]) {
-                fprintf(stderr, " erase searching branch %u\n", *it);
+                fprintf(stderr, " erase searching branch %u\n Point B",context_idx_ );
                 Q[context_idx_].searching_branches.erase(it);
               }
             }
@@ -3788,7 +3787,6 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
   bool CfgHeuristicCSSearch::DoSearchOnce() {
     fprintf(stderr,"DoSearchOnce\n");
     fprintf(stderr,"context energy:%u\n", Q[context_idx_].energy);
-    fprintf(stderr, "aaaa context %u\n", context_idx_);
     // Context &context = Q[context_idx_];
     if(Q[context_idx_].scoredBranches.empty()) {
       // fprintf(stderr, "scoredBranches is empty\n");
@@ -3835,8 +3833,6 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
     vector<value_t> input;
     // for (size_t i = 0; i < scoredBranches.size(); i++) {
     while(Q[context_idx_].cur_idx < Q[context_idx_].scoredBranches.size()) {
-
-
       fprintf(stderr, "iters = %u\n", Q[context_idx_].iters);
       if ((Q[context_idx_].iters <= 0) ||
        (Q[context_idx_]
@@ -3851,13 +3847,14 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
       num_inner_solves_ ++;
 
       if (!SolveAtBranch(Q[context_idx_].cur_ex, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].first, &input)) { // Unsat
-        // fprintf(stderr, "unsat\n");
-
+        fprintf(stderr, "unsat\n");
         Q[context_idx_].cur_idx++;
         continue;
       }
       RunProgram(input, &new_ex);
+      fprintf(stderr, "1 iters = %u\n", Q[context_idx_].iters);
       Q[context_idx_].iters--;
+      fprintf(stderr, "2 iters = %u\n", Q[context_idx_].iters);
       // fprintf(stderr, "iters = %d\n", Q[context_idx_].iters);
 
       size_t b_idx = Q[context_idx_].cur_ex.path().constraints_idx()[Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].first];
@@ -3869,54 +3866,34 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
       // fprintf(stderr, "elapsed_time_searching_5 : %.2f\n", elapsed_time_searching_5_.count() );
       set<branch_id_t> new_target_branches;
       // fprintf(stderr, "a1\n");
-      GetNewTargetBranches(new_ex, new_target_branches);
-      // fprintf(stderr, "a2\n");
-      if(!new_target_branches.empty()) {
-        fprintf(stderr, "a333a\n");
-        // Q.push_back(Context(new_ex, new_target_branches));
-        // fprintf(stderr,"context_idx_ : %u Q.size() %u\n", context_idx_, Q.size());
-        // single q
-        // fprintf(stderr, "found new target branches\n");
-        // auto start = std::chrono::high_resolution_clock::now();
-        // Context new_context = Context(new_ex, new_target_branches);
-        // Context new_context(new_ex, new_target_branches);
-        // new_context.dist.resize(max_branch_, 0);
-        // new_context.covered = covered_;
-        // Context new_context = Q[context_idx_];
-        // new_context.target_branches = new_target_branches;
-        // Q.insert(Q.begin() + context_idx_, new_context);
-        fprintf(stderr, "a333b\n");
-        fprintf(stderr, "context_idx  = %u\n",context_idx_);
-        Q.insert(Q.begin() + context_idx_, Q[context_idx_]);
-        // Q.emplace(Q.begin()+context_idx);
-        Q[context_idx_].target_branches = new_target_branches;
+      if (found_new_branch) {
+          GetNewTargetBranches(new_ex, new_target_branches);
+          if(!new_target_branches.empty()) {
+              // Context newContext();
+              // Q.emplace(Q.begin() + context_idx_);
+              // Stack <SubContext> tmp = std::move(Q[context_idx_].sub_context_stack);
+              Context &newContext = *(Q.emplace(Q.begin() + context_idx_));
+              Q[context_idx_ + 1].clone(newContext);
+              newContext.target_branches = new_target_branches;
+              // Q[context_idx_ + 1].target_branches = new_target_branches;
+              // Q.emplace(Q.begin()+context_idx);
+              // Q[context_idx_].target_branches = new_target_branches;
 
-        fprintf(stderr, "a444\n Q size : %zu\n", Q.size());
-        fprintf(stderr, "a444a q[%u] size : %zu\n", context_idx_,Q[context_idx_].dist.size());
-        fprintf(stderr, "a444b q[%u] size : %zu\n", context_idx_+1, Q[context_idx_+1].dist.size());
-        for(Context &c : Q) {
-          fprintf(stderr, "path size : %zu \n", c.cur_ex.path().constraints().size());
-        }
-        context_idx_++;
-        // fprintf(stderr, "found new target branches2\n");
-        // auto end = std::chrono::high_resolution_clock::now();
-        // elapsed_time_searching_1_ += (end - start);
-        // fprintf(stderr, "elapsed_time_searching_1_: %.5f\n",elapsed_time_searching_1_.count() );
-        // fprintf(stderr,"context_idx_ : %u Q.size() %u\n", context_idx_, Q.size());
-
-        // fprintf(stderr, "start emplace Q\n");
-        // Q.emplace(Q.begin() + context_idx_);
-        // fprintf(stderr, "after emplace Q\n");
-        // Context &new_context = Q[context_idx_];
-        // fprintf(stderr, "start copy after emplace Q\n");
-        // new_context.cur_ex.SetPath(new_ex.path());
-        // fprintf(stderr, "end copy after emplace Q\n");
+              // fprintf(stderr, "a444\n Q size : %zu\n", Q.size());
+              fprintf(stderr, "a444a q[%u] size : %zu\n", context_idx_,Q[context_idx_].dist.size());
+              fprintf(stderr, "a444b q[%u] size : %zu\n", context_idx_+1, Q[context_idx_+1].dist.size());
+              context_idx_++;
+          }
+          // fprintf(stderr, "a555\n");
+          // for(Context &c : Q) {
+          //   fprintf(stderr, "22 path size : %zu \n", c.cur_ex.path().constraints().size());
+          for(Context &c : Q) {
+              fprintf(stderr, "path size : %zu \n", c.cur_ex.path().constraints().size());
+          }
       }
-      fprintf(stderr, "a555\n");
-      for(Context &c : Q) {
-        fprintf(stderr, "22 path size : %zu \n", c.cur_ex.path().constraints().size());
-        fprintf(stderr, "22 dist size : %zu \n", c.dist.size());
-      }
+      
+      //   fprintf(stderr, "22 dist size : %zu \n", c.dist.size());
+      // }
       // context = Q[context_idx_];
       bool prediction_failed = !CheckPrediction(Q[context_idx_].cur_ex, new_ex, b_idx);
 // fprintf(stderr, "a5\n");
@@ -3930,9 +3907,9 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
         // because prediction failed.
         num_inner_lucky_successes_ ++;
         num_inner_successes_pred_fail_ ++;
-        fprintf(stderr, " Do Search Success 1 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
+        fprintf(stderr, " Do Search Success 1 : Swap! path size = %zu, %zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
         Q[context_idx_].latest_success_ex.Swap(new_ex);
-        fprintf(stderr, " Do Search Success 2 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
+        fprintf(stderr, " Do Search Success 2 : Swap! path size = %zu, %zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
         // context.latest_success_ex = new_ex;
         return true;
       }
@@ -3959,7 +3936,6 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
 
           fprintf(stderr, " Do Search Success b1 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
         	Q[context_idx_].latest_success_ex.Swap(new_ex);
-
           fprintf(stderr, " Do Search Success b2 : Swap! path size = %zu,%zu\n", new_ex.path().constraints().size(), Q[context_idx_].latest_success_ex.path().constraints().size());
         	return true;
         } else {
@@ -4009,7 +3985,7 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
         for(set<branch_id_t>::iterator it = c.searching_branches.begin(); it!=c.searching_branches.end(); it++) {
           set<branch_id_t>::iterator it2 = Q[context_idx_].searching_branches.find(*it);
           if( it2 != Q[context_idx_].searching_branches.end()) {
-            fprintf(stderr, "erase %d: \n", *it2);
+            fprintf(stderr, "searching branch exists, erase %u(Point A): \n",context_idx_ );
             Q[context_idx_].searching_branches.erase(it2);
           }
         }
@@ -4021,8 +3997,18 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
       if(!Q[context_idx_].searching_branches.empty()) {
           // fprintf(stderr, "Searching branches are not empty\n");
 
-        Q[context_idx_].stack_sub_context.push(SubContext(b_idx, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second -1, new_ex));
-        // fprintf(stderr, "Searching branches are not empty 2\n");
+
+        Q[context_idx_].stack_sub_context.push(SubContext(b_idx, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second -1));
+
+        //Q[context_idx_].stack_sub_context.push((SubContext(b_idx, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second -1));
+        //
+        new_ex.clone((Q[context_idx_].stack_sub_context.top().cur_ex));
+
+         fprintf(stderr, "Searching branches are not empty 2\n");
+         fprintf(stderr, "Stack top path size : \n", Q[context_idx_].stack_sub_context.top().cur_ex.path().constraints().size());
+
+        
+
         if (found_new_branch) {
             Q[context_idx_].latest_success_ex.Swap(new_ex);
           Q[context_idx_].do_search_once_found_new_branch = true;
@@ -4083,8 +4069,10 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
         }
 
         if (!found_path) {
+            fprintf(stderr, "SolveOnePathAlongCfg() pop 1\n");
 
           stack.pop();
+
           if(!stack.empty()) {
             stack.top().b_idx++;
           }
@@ -4123,7 +4111,9 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
                 sc.seen.insert(sc.b_idx);
             //    if(sc.dist != 0) {
                   // fprintf(stderr, "push sub context\n");
-                  stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist -1 , sc.cur_ex));
+                //  stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist -1 , sc.cur_ex));
+                  stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist -1 ));
+                  sc.cur_ex.clone(stack.top().cur_ex);
                   continue;
              //   }
               } else {
@@ -4167,22 +4157,40 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
           //   Q.push_back(Context(new_ex, new_target_branches));
           // }
           set<branch_id_t> new_target_branches;
+          
+          if(found_new_branch) {
           GetNewTargetBranches(new_ex, new_target_branches);
           // if(!new_target_branches.empty() && Q.size() < 5) {
           if(!new_target_branches.empty()) {
-            auto start = std::chrono::high_resolution_clock::now();
+            // auto start = std::chrono::high_resolution_clock::now();
             // Q.push_back(Context(new_ex, new_target_branches));
             // fprintf(stderr, "found new target branches\n");
             // fprintf(stderr, "start emplace\n");
             // Q.emplace(Q.begin() + context_idx_);
             // fprintf(stderr, "after emplace Q\n");
             // Context &new_context = Q[context_idx_];
+            //
+            // Context new_context = Context(new_ex, new_target_branches);
+            // new_context.dist.resize(max_branch_, 0);
+            // new_context.covered = covered_;
+            // Q.insert(Q.begin() + context_idx_, new_context);
+            // context_idx_++;
 
-            Context new_context = Context(new_ex, new_target_branches);
-            new_context.dist.resize(max_branch_, 0);
-            new_context.covered = covered_;
-            Q.insert(Q.begin() + context_idx_, new_context);
+              // Context newContext();
+              // Q.emplace(Q.begin() + context_idx_);
+              std::stack<SubContext> tmp = std::move(Q[context_idx_].stack_sub_context);
+            Context &newContext = *(Q.emplace(Q.begin() + context_idx_));
+            Q[context_idx_ + 1].clone(newContext);
+            Q[context_idx_ + 1].stack_sub_context = std::move(tmp);
+            Q[context_idx_].target_branches = new_target_branches;
+            // Q.emplace(Q.begin()+context_idx);
+            // Q[context_idx_].target_branches = new_target_branches;
+
+            // fprintf(stderr, "a444\n Q size : %zu\n", Q.size());
+            fprintf(stderr, "a444a q[%u] size : %zu\n", context_idx_,Q[context_idx_].dist.size());
+            fprintf(stderr, "a444b q[%u] size : %zu\n", context_idx_+1, Q[context_idx_+1].dist.size());
             context_idx_++;
+
             //
             // Context new_context = Context(new_ex, new_target_branches);
             // new_context.dist.resize(max_branch_, 0);
@@ -4197,10 +4205,12 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
             // fprintf(stderr, "elapsed_time_searching_1_: %.5f\n",elapsed_time_searching_1_.count() );
           }
 
-          if(found_new_branch) {
             Q[context_idx_].latest_success_ex.Swap(new_ex);
             Q[context_idx_].stack_sub_context = std::stack<SubContext>();
-
+            //while(!Q[context_idx_].stack_sub_context.empty()) {
+             //   Q[context_idx_].stack_sub_context.pop();
+           // }
+//
             return true;
           }
 
@@ -4212,7 +4222,9 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
           }
              if(sc.seen2.find(sc.b_idx)== sc.seen2.end()) {
                 sc.seen2.insert(sc.b_idx);
-                stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist-1, new_ex));
+                //stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist-1, new_ex));
+                stack.push(SubContext(sc.idxs[sc.b_idx], sc.dist-1));
+                new_ex.clone(stack.top().cur_ex);
                 return false;
               } else {
                 sc.b_idx++;
@@ -4221,7 +4233,9 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
         }
         sc.b_idx++;
       } else {
+            fprintf(stderr, "SolveOnePathAlongCfg() pop 2\n");
         stack.pop();
+
       }
     } // end while
     return false;

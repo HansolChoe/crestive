@@ -29,12 +29,13 @@ class SymbolicPred {
  public:
   SymbolicPred();
 
-  SymbolicPred(const SymbolicPred& sp);
-  // SymbolicPred (const SymbolicPred& sp);
-  SymbolicPred (SymbolicPred &&move);
-  SymbolicPred& operator=(const SymbolicPred& sp);
-  SymbolicPred& operator=(SymbolicPred &&other);
+  // SymbolicPred(const SymbolicPred& sp);
+  // SymbolicPred (SymbolicPred &&move);
+  // SymbolicPred& operator=(const SymbolicPred& sp);
+  // SymbolicPred& operator=(SymbolicPred &&other);
   SymbolicPred(compare_op_t op, SymbolicExpr* expr);
+  SymbolicPred(compare_op_t op,  SymbolicExpr& expr);
+  // void clone(SymbolicPred &sp);
   ~SymbolicPred();
 
   void Negate();
@@ -55,10 +56,10 @@ class SymbolicPred {
 
   compare_op_t op() const { return op_; }
   const SymbolicExpr& expr() const { return *expr_; }
-
- private:
+  SymbolicExpr * p_expr() { return expr_;}
   compare_op_t op_;
   SymbolicExpr* expr_;
+ private:
 };
 
 }  // namespace crest

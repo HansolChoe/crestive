@@ -10,7 +10,7 @@ ifeq ($(OS),Darwin)
 CFLAGS = -I. -I$(Z3_INCLUDE) -fpermissive -Wall -O2 -std=c++11 -Wno-narrowing
 #If Operating System is Linux
 else
-CFLAGS = -I. -I$(Z3_INCLUDE) -Wall -O2 -std=c++11 -Wno-narrowing
+CFLAGS = -g -I. -I$(Z3_INCLUDE) -Wall -O2 -std=c++11 -Wno-narrowing
 endif
 
 CXXFLAGS = $(CFLAGS)

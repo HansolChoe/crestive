@@ -30,12 +30,14 @@ class SymbolicExecution {
  public:
   SymbolicExecution();
 
-  SymbolicExecution(const SymbolicExecution& se);
-  SymbolicExecution& operator=(const SymbolicExecution& rhs);
-  SymbolicExecution& operator=(SymbolicExecution&& rhs);
-  SymbolicExecution(SymbolicExecution &&move);
+  // SymbolicExecution(const SymbolicExecution& se);
+  // SymbolicExecution& operator=(const SymbolicExecution& rhs);
+  // SymbolicExecution& operator=(SymbolicExecution&& rhs);
+  // SymbolicExecution(SymbolicExecution &&move);
   explicit SymbolicExecution(bool pre_allocate);
   ~SymbolicExecution();
+
+  void clone(SymbolicExecution& se);
 
   void Swap(SymbolicExecution& se);
 
