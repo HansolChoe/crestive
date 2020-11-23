@@ -34,15 +34,14 @@ SymbolicExecution::SymbolicExecution() { }
 
 
 void SymbolicExecution::clone(SymbolicExecution &ex) {
-  fprintf(stderr, "SymbolicExecution : clone\n");
+  // fprintf(stderr, "SymbolicExecution : clone\n");
   // map - just copy
   ex.vars_ = vars_;
   // vector - just copy;
   ex.inputs_  = inputs_;
   // path - call clone function;
   path_.clone(ex.path_) ;
-  fprintf(stderr, "path to clone constraint size : %zu", path_.constraints().size());
-  fprintf(stderr, "cloned path constraint size : %zu", path_.constraints().size());
+  // fprintf(stderr, "path to clone constraint size : %zu", path_.constraints().size());
 
 }
 
@@ -50,8 +49,6 @@ SymbolicExecution::SymbolicExecution(bool pre_allocate)
   : path_(pre_allocate) { }
 
 SymbolicExecution::~SymbolicExecution() {
-fprintf(stderr, "SE distructur called\n");
-fprintf(stderr, "SE distructur called : path size : %zu\n",path_.constraints_.size());
  }
 
 void SymbolicExecution::Swap(SymbolicExecution& se) {

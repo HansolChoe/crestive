@@ -30,6 +30,10 @@ int main(int argc, char* argv[]) {
   string prog = argv[1];
   int num_iters = atoi(argv[2]);
   string search_type = argv[3];
+  int execution_time = 600;
+  if(argc==5) {
+   execution_time = atoi(argv[4]);
+  }
   string command = argv[2];
 
   // Initialize the random number generator.
@@ -58,6 +62,8 @@ string input_directory_name ="";
     strategy = new crest::RandomESSearch(prog, num_iters);
   } else if (search_type == "-cs_random") {
     strategy = new crest::RandomCSSearch(prog, num_iters);
+  } else if (search_type == "-cs_random2") {
+    strategy = new crest::RandomCSSearch(prog, num_iters);
   } else if (search_type == "-random_input") {
     strategy = new crest::RandomInputSearch(prog, num_iters);
   } else if (search_type == "-dfs") {
@@ -66,8 +72,6 @@ string input_directory_name ="";
     } else {
       strategy = new crest::BoundedDepthFirstSearch(prog, num_iters, atoi(argv[4]));
     }
-  } else if (search_type == "-es_cfg") {
-    strategy = new crest::CfgHeuristicESSearch(prog, num_iters);
   } else if (search_type == "-cs_cfg") {
     strategy = new crest::CfgHeuristicCSSearch(prog, num_iters);
   } else if (search_type == "-cfg") {
@@ -91,15 +95,19 @@ string input_directory_name ="";
     fprintf(stderr, "Unknown search strategy: %s\n", search_type.c_str());
     return 1;
   }
+  strategy->SetTimeOut(execution_time);
 
   if (is_run_directory_option) {
     strategy -> RunDirectory(input_directory_name.c_str());
   } else {
-    strategy->SetIsSaveTestcasesOption(true);
-    system("rm -r testcases");
-    system("mkdir testcases");
+    strategy->SetIsSaveTestcasesOption(false);
     // system("touch testcases/input1");
-    strategy->Run();
+
+    if( search_type == "-cs_random2") {
+      strategy-> Run2();
+    } else {
+      strategy->Run();
+    }
   }
 
   delete strategy;

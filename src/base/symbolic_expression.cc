@@ -42,7 +42,7 @@ SymbolicExpr::SymbolicExpr(const SymbolicExpr& e)
 
 void SymbolicExpr::clone(SymbolicExpr *se) {
 
-  fprintf(stderr, "clone SymbolicExpr\n");
+  // fprintf(stderr, "clone SymbolicExpr\n");
   se = new SymbolicExpr(0);
   se->const_ = const_;
   se->coeff_ = coeff_;

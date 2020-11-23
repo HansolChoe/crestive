@@ -29,7 +29,7 @@ namespace crest {
   //
   void SymbolicPath::clone(SymbolicPath &path) {
     // vector<SymbolicPred*> : just copy
-    fprintf(stderr, "SymbolicPath : clone\n");
+    // fprintf(stderr, "SymbolicPath : clone\n");
     path.branches_ = branches_;
     // vector<size_t> : just copy
     path.constraints_idx_ = constraints_idx_;
@@ -37,9 +37,6 @@ namespace crest {
     // allocate new memory and copy it
     path.constraints_ = vector<SymbolicPred*>(constraints_.size());
     for(size_t i = 0; i < constraints_.size(); i++) {
-      // path.constraints_[i] = new SymbolicPred(constraints_[i]->op(), constraints_[i]->expr());
-      // path.constraints_[i] = new SymbolicPred();
-      // path.constraints_[i] = new SymbolicPred(constraints_[i]->op(), *constraints_[i]->p_expr());
       path.constraints_[i] = new SymbolicPred();
       path.constraints_[i]->op_ = constraints_[i]->op();
      // delete path.constraints_[i]->expr_;
@@ -47,18 +44,18 @@ namespace crest {
       path.constraints_[i]->expr_->const_ = constraints_[i]->expr_->const_;
       path.constraints_[i]->expr_->coeff_ = constraints_[i]->expr_->coeff_;
     }
-    fprintf(stderr, "SymbolicPath this path size : %zu \n",constraints_.size());
-    fprintf(stderr, "SymbolicPath copied path size : %zu \n",path.constraints_.size());
+    // fprintf(stderr, "SymbolicPath this path size : %zu \n",constraints_.size());
+    //fprintf(stderr, "SymbolicPath copied path size : %zu \n",path.constraints_.size());
   }
 SymbolicPath::~SymbolicPath() {
-  fprintf(stderr, "SymbolicPath : destructor\n");
-  fprintf(stderr, "free constraints size: %u\n",constraints_.size());
+  // fprintf(stderr, "SymbolicPath : destructor\n");
+  // fprintf(stderr, "free constraints size: %u\n",constraints_.size());
   for (size_t i = 0; i < constraints_.size(); i++)
     delete constraints_[i];
 }
 
 void SymbolicPath::Swap(SymbolicPath& sp) {
-  fprintf(stderr, "Swap path\n");
+  // fprintf(stderr, "Swap path\n");
   branches_.swap(sp.branches_);
   constraints_idx_.swap(sp.constraints_idx_);
   constraints_.swap(sp.constraints_);
@@ -114,17 +111,13 @@ bool SymbolicPath::Parse(istream& s) {
   constraints_idx_.resize(len);
   constraints_.resize(len);
   s.read((char*)&constraints_idx_.front(), len * sizeof(size_t));
-  fprintf(stderr, "parse constraints start\n");
+  // fprintf(stderr, "parse constraints start\n");
   for (ConIt i = constraints_.begin(); i != constraints_.end(); ++i) {
-    // *i = new SymbolicPred();
     *i = new SymbolicPred();
-    // if (!(*i)->Parse(s))
-    //   return false;
     if(!(*i)->Parse(s)){
       return false;
     }
   }
-  fprintf(stderr, "parse constraints end\n");
 
   return !s.fail();
 }
