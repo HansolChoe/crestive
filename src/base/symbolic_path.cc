@@ -33,19 +33,15 @@ namespace crest {
     path.branches_ = branches_;
     // vector<size_t> : just copy
     path.constraints_idx_ = constraints_idx_;
-    // vector<SymbolicPred*>
     // allocate new memory and copy it
     path.constraints_ = vector<SymbolicPred*>(constraints_.size());
     for(size_t i = 0; i < constraints_.size(); i++) {
       path.constraints_[i] = new SymbolicPred();
       path.constraints_[i]->op_ = constraints_[i]->op();
-     // delete path.constraints_[i]->expr_;
-     // path.constraints_[i]->expr_ = new SymbolicExpr();
+
       path.constraints_[i]->expr_->const_ = constraints_[i]->expr_->const_;
       path.constraints_[i]->expr_->coeff_ = constraints_[i]->expr_->coeff_;
     }
-    // fprintf(stderr, "SymbolicPath this path size : %zu \n",constraints_.size());
-    //fprintf(stderr, "SymbolicPath copied path size : %zu \n",path.constraints_.size());
   }
 SymbolicPath::~SymbolicPath() {
   // fprintf(stderr, "SymbolicPath : destructor\n");

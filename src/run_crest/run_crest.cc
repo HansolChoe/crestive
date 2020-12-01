@@ -30,6 +30,7 @@ int main(int argc, char* argv[]) {
   string prog = argv[1];
   int num_iters = atoi(argv[2]);
   string search_type = argv[3];
+  // int execution_time = 1800;
   int execution_time = 600;
   if(argc==5) {
    execution_time = atoi(argv[4]);

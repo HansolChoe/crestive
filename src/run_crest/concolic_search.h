@@ -92,20 +92,13 @@ public:
   set<size_t> seen2;
  };
 
- // class EXContext {
- // public:
- //   EXContext(SymbolicExecution _e, set<branch_id_t> _t) {
- //     ex = _e;
- //     target_branches = _t;
- //   }
- //   SymbolicExecution ex;
- //   set<branch_id_t> target_branches;
- // };
 class Context {
 public:
 
   Context() {
     // fprintf(stderr, "Context constructor (no parama)\n");
+    cur_ex = new SymbolicExecution();
+    latest_success_ex = new SymbolicExecution();
     energy = 0;
     is_reset = false;
     cur_idx = 0;
@@ -113,17 +106,19 @@ public:
     is_do_search_failed = false;
     iters = 30;
     num_covered = 0;
+    stack_sub_context = stack<SubContext*>();
   }
 
   void clone(Context &c) {
+    fprintf(stderr, "Context clone\n");
     c.energy = 0;
     c.is_reset = false;
     c.cur_idx = 0;
-    c.iters = 30;
-    c.do_search_once_found_new_branch = false;
+    c.iters = iters;
+    c.do_search_once_found_new_branch = do_search_once_found_new_branch;
     c.is_do_search_failed = false;
-    // fprintf(stderr, "Context c - clone to cur_ex\n");
-    cur_ex.clone(c.cur_ex);
+    cur_ex->clone(*c.cur_ex);
+    // c.target_branches = target_branches;
     c.dist.resize(dist.size(), 0);
     num_covered = 0;
   }
@@ -143,157 +138,17 @@ public:
   set<branch_id_t> searching_branches;
   vector<ScoredBranch> scoredBranches;
   stack<SubContext*> stack_sub_context;
-
-  SymbolicExecution cur_ex;
-  SymbolicExecution latest_success_ex;
+  SymbolicExecution *cur_ex;
+  SymbolicExecution *latest_success_ex;
 
   ~Context()  {
+    delete cur_ex;
+    delete latest_success_ex;
     while(!stack_sub_context.empty()) {
         delete stack_sub_context.top();
         stack_sub_context.pop();
     }
   }
-
-  // Context& operator=(Context &&other) noexcept {
-  //   fprintf(stderr, "move~\n");
-  //   if (this != &other) {
-  //     fprintf(stderr, "here\n");
-  //   }
-  //   return *this;
-  // }
-
-
-  // void PrintPathConstraint(const SymbolicPath &sym_path) {
-  //   string tmp;
-  //   if (sym_path.constraints().size() == 0) {
-  //     std::cerr << "(Empty)" << std::endl;
-  //     return;
-  //   }
-  //   for (size_t i = 0; i < sym_path.constraints().size(); i++) {
-  //     tmp.clear();
-  //     size_t b_idx = sym_path.constraints_idx()[i];
-  //     branch_id_t bid = sym_path.branches()[b_idx];
-  //     sym_path.constraints()[i]->AppendToString(&tmp);
-  //     std::cerr << i << "("<<bid << "): " << tmp << '\n';
-  //   }
-  // }
-
-  // Context(SymbolicExecution &_e, set<branch_id_t> _target_branches) {
-  //   fprintf(stderr, " Context constructor start\n");
-  //   cur_ex = _e;
-  //   fprintf(stderr, " Context constructor end\n");
-  //
-  //
-  //   // PrintPathConstraint(cur_ex.path());
-  //   target_branches = _target_branches;
-  //   is_reset = false;
-  //   cur_idx = 0;
-  //   is_do_search_failed = false;
-  //   do_search_once_found_new_branch = false;
-  //   energy = 0;
-  //   iters = 30;
-  //   num_covered = 0;
-  //   // fprintf(stderr, " Context constructor end\n");
-  // }
-  //
-  // Context& operator=(const Context &m) {
-  //   fprintf(stderr, "se operator=\n");
-  //   if ( this != &m) {
-  //     // cur_ex = std::move(m.cur_ex);
-  //     cur_ex = std::move(m.cur_ex);
-  //     latest_success_ex = std::move(m.latest_success_ex);
-  //
-  //     stack_sub_context = std::move(m.stack_sub_context);
-  //
-  //     covered = std::move(m.covered);
-  //     dist = std::move(m.dist);
-  //     // fprintf(stderr, "dist size : %zu %n", dist.size());
-  //     new_branches = std::move(m.new_branches);
-  //     target_branches = std::move(m.target_branches);
-  //     target_branches = std::move(m.searching_branches);
-  //     scoredBranches = std::move(m.scoredBranches);
-  //
-  //     num_covered = m.num_covered;
-  //     iters = m.iters;
-  //     energy = m.energy;
-  //     cur_idx = m.cur_idx;
-  //     is_do_search_failed = m.is_do_search_failed;
-  //
-  //
-  //     // context_idx_ = m.context_idx_;
-  //     fprintf(stderr, "m.iters = %u\n", m.iters);
-  //     fprintf(stderr, "iters = %u\n", iters);
-  //     // m.iters = 0;
-  //     // m.num_covered = 0;
-  //     // m.energy = 0;
-  //     // m.cur_idx = 0;
-  //   }
-  //   return *this;
-  // }
-
-  //
-  //
-  // Context(Context &&m)  {
-  //
-  //   fprintf(stderr, "move Context\n");
-  //   cur_ex = std::move(m.cur_ex);
-  //   latest_success_ex = std::move(m.latest_success_ex);
-  //
-  //   stack_sub_context = std::move(m.stack_sub_context);
-  //
-  //   covered = std::move(m.covered);
-  //   dist = std::move(m.dist);
-  //   // fprintf(stderr, "dist size : %zu %n", dist.size());
-  //   new_branches = std::move(m.new_branches);
-  //   target_branches = std::move(m.target_branches);
-  //   target_branches = std::move(m.searching_branches);
-  //   scoredBranches = std::move(m.scoredBranches);
-  //
-  //   num_covered = m.num_covered;
-  //   iters = m.iters;
-  //   energy = m.energy;
-  //   cur_idx = m.cur_idx;
-  //   is_do_search_failed = m.is_do_search_failed;
-  //
-  //
-  //   // context_idx_ = m.context_idx_;
-  //   fprintf(stderr, "m.iters = %u\n", m.iters);
-  //   fprintf(stderr, "iters = %u\n", iters);
-  //   m.iters = 0;
-  //   m.num_covered = 0;
-  //   m.energy = 0;
-  //   m.cur_idx = 0;
-  // }
-  //
-
-
-
-  //
-  // Context(const Context &m) {
-  //   fprintf(stderr, "context copy\n");
-  //   cur_ex = m.cur_ex;
-  //   latest_success_ex = m.latest_success_ex;
-  //
-  //   stack_sub_context = m.stack_sub_context;
-  //
-  //   covered = m.covered;
-  //   dist = m.dist;
-  //   fprintf(stderr, "dist size : %zu , %zu\n", dist.size(), m.dist.size());
-  //   new_branches = m.new_branches;
-  //   target_branches = m.target_branches;
-  //   searching_branches = m.searching_branches;
-  //   scoredBranches = m.scoredBranches;
-  //
-  //   num_covered = m.num_covered;
-  //   iters = m.iters;
-  //   energy = m.energy;
-  //   cur_idx = m.cur_idx;
-  //   is_do_search_failed = m.is_do_search_failed;
-  //   fprintf(stderr, "context copy finished\n");
-  //   fprintf(stderr, "scored_branches size : %zu , %zu\n", scoredBranches.size(), m.scoredBranches.size());
-  //   // fprintf(stderr, "scored_branches size : %u\n");
-  // }
-
  };
 
 class Search {
@@ -449,7 +304,7 @@ class RandomCSSearch : public Search {
   ~RandomCSSearch() {}
   // virtual ~RandomCSSearch();
   virtual void Run();
-  void Run2();
+  // void Run2();
   // void AssignEnergy(EXContext &c);
   size_t AssignEnergy(EXContext &c);
   // set<branch_id_t> uncovered_branches_;
@@ -461,6 +316,7 @@ protected:
   bool UpdateCoverage(const SymbolicExecution& ex, set<branch_id_t>* new_branches, EXContext &context);
  private:
   deque<EXContext> Q;
+  set<branch_id_t> F;
   // bool SolveRandomBranch(vector<value_t>* next_input, size_t* idx);
   bool SolveRandomBranch(SymbolicExecution &ex, vector<value_t>* next_input, size_t* idx);
 };
@@ -652,11 +508,13 @@ class CfgHeuristicCSSearch : public Search {
   virtual ~CfgHeuristicCSSearch();
   virtual void Run();
 protected:
+  SymbolicExecution *cur_ex_;
+  set<branch_id_t> cur_target_branches_;
 
   set<branch_id_t> covered_branches_;
   bool UpdateCoverage(const SymbolicExecution& ex, set<branch_id_t> *new_branches, Context &context);
   bool UpdateCoverage(const SymbolicExecution& ex, Context &context);
-  size_t AssignEnergy(Context &c);
+  // size_t AssignEnergy(Context &c);
   void UpdateCurContext();
   // void UpdateCurContext();
   // void GetNewTargetBranches(SymbolicExecution &next_ex,set<branch_id_t> &u);
@@ -665,7 +523,8 @@ protected:
 
  private:
    deque<Context> Q;
-   size_t context_idx_;
+   set<branch_id_t> F;
+   // size_t context_idx_;
 
   // vector<Context> v_context_;
   // set<branch_id_t> all_new_branches;

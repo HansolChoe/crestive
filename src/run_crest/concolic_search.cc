@@ -166,7 +166,8 @@ Search::Search(const string& program, int max_iterations)
   start_time_ = time(NULL);
   begin_total_ = std::chrono::high_resolution_clock::now();
   summary_time_ = 0;
-  time_out_ = 600;
+  //time_out_ = 1800;
+  time_out_ =600; 
   num_prediction_fail_ = 0;
   num_unsat_ = 0;
 
@@ -2048,7 +2049,8 @@ void RandomSearch::SolveUncoveredBranches(size_t i, int depth,
      return  energy;
   }
 
-// energy 1 (**not** context individual count)
+
+/*
 void RandomCSSearch::Run2() {
     size_t idx = 0;
     while(true) {
@@ -2097,10 +2099,6 @@ void RandomCSSearch::Run2() {
             for(size_t i = AssignEnergy(c); i > 0; i--) {
                 if (SolveRandomBranch(*c.ex, &next_input, &idx)) {
                     RunProgram(next_input, next_ex);
-                    // Update B
-                    for (const size_t &i: next_ex->path().constraints_idx()) {
-                        covered_branches_.insert(next_ex->path().branches()[i]);
-                    }
                     if(UpdateCoverage(*next_ex, c)) {
                         fprintf(stderr, "found new branch \n");
                         count=0;
@@ -2196,28 +2194,31 @@ void RandomCSSearch::Run2() {
         delete next_ex;
     }
 }
-
+*/
 void RandomCSSearch::Run() {
     size_t idx = 0;
     while(true) {
         system("cp -r seeds/input1 input");
         SymbolicExecution *next_ex = new SymbolicExecution();
         vector<value_t> next_input;
+        fprintf(stderr, "RESET\n");
         covered_.assign(max_branch_, false);
         reachable_branches_set_.clear();
         covered_branches_.clear();
-        fprintf(stderr, "RESET\n");
-        RunProgram(next_input, next_ex);
+        F.clear();
 
+        RunProgram(next_input, next_ex);
         set<branch_id_t> uncovered_branches;
         for (const size_t &i: next_ex->path().constraints_idx()) {
-            covered_branches_.insert(next_ex->path().branches()[i]);
+            // covered_branches_.insert(next_ex->path().branches()[i]);
             uncovered_branches.insert(paired_branch_[next_ex->path().branches()[i]]);
         }
-        SymbolicExecution *ex = new SymbolicExecution();
-        next_ex->clone(*ex);
-        Q.push_back(EXContext(ex, uncovered_branches));
-        if(UpdateCoverage(*next_ex, Q.front())) {
+
+        SymbolicExecution *new_ex = new SymbolicExecution();
+        next_ex->clone(*new_ex);
+        Q.push_back(EXContext(new_ex, uncovered_branches));
+
+        if(UpdateCoverage(*new_ex, Q.front())) {
             fprintf(stderr, "found new branch \n");
         }
         // size_t count = 0;
@@ -2226,31 +2227,13 @@ void RandomCSSearch::Run() {
           fprintf(stderr,"Q size %zu\n", Q.size());
             EXContext c = Q.front();
             Q.pop_front();
-            set<branch_id_t> cur_target_branches;
             if(c.count >= 10000) {
-              bool all_other_contexts_failed = true;
-              for(size_t i = 0 ; i < Q.size() ; i++) {
-                EXContext &ex_context = Q[i];
-                if (ex_context.count < 10000) {
-                  all_other_contexts_failed = false;
-                  break;
-                }
-              }
-              if (all_other_contexts_failed) {
-                while(!Q.empty()) {
-                  EXContext c = Q.front();
-                  Q.pop_front();
-                  delete c.ex;
-                  break;
-                }
-              }
-              // if(c.count >= 10) {
-                  fprintf(stderr, "skip a context\n");
-                  EXContext(c.ex, c.target_branches,c.count);
-                  fprintf(stderr, "count : %u\n", Q.front().count);
-                  continue;
-              // }
+              fprintf(stderr, "c.count >= 10000 (fail)\n");
+              F.insert(c.target_branches.begin(), c.target_branches.end());
+              delete c.ex;
+              continue;
             }
+            set<branch_id_t> cur_target_branches;
             set_difference(
                     c.target_branches.begin(),
                     c.target_branches.end(),
@@ -2258,22 +2241,21 @@ void RandomCSSearch::Run() {
                     covered_branches_.end(),
                     std::inserter(cur_target_branches,cur_target_branches.end())
                     );
-            // fprintf(stderr,"cur_target_branches size %zu\n", cur_target_branches.size());
+            fprintf(stderr,"cur_target_branches size %zu\n", cur_target_branches.size());
             if(cur_target_branches.empty()) {
                 fprintf(stderr,"Q size %zu\n", Q.size());
                 delete c.ex;
                 continue;
-            } else {
-                c.target_branches = cur_target_branches;
             }
+
+            SymbolicExecution *ex = new SymbolicExecution();
+            c.ex->clone(*ex);
+
             bool search_failed = false;
-            for(size_t i = AssignEnergy(c); i > 0 && c.count < 10000; i--) {
-                if (SolveRandomBranch(*c.ex, &next_input, &idx)) {
+            for(size_t i = 200; i > 0 && c.count < 10000; i--) {
+              fprintf(stderr, "i : %u\n",i);
+                if (SolveRandomBranch(*ex, &next_input, &idx)) {
                     RunProgram(next_input, next_ex);
-                    // Update B
-                    for (const size_t &i: next_ex->path().constraints_idx()) {
-                        covered_branches_.insert(next_ex->path().branches()[i]);
-                    }
                     if(UpdateCoverage(*next_ex, c)) {
                         fprintf(stderr, "found new branch \n");
                         c.count=0;
@@ -2282,10 +2264,9 @@ void RandomCSSearch::Run() {
                     }
                     fprintf(stderr,"c.count : %zu\n", c.count);
 
-                    if(!CheckPrediction(*c.ex, *next_ex, c.ex->path().constraints_idx()[idx]) ) {
+                    if(!CheckPrediction(*ex, *next_ex, ex->path().constraints_idx()[idx]) ) {
                         // pf_count_[c.ex.path().branches()[c.ex.path().constraints_idx()[idx]]]++;
                         fprintf(stderr, "Prediction Failure!\n");
-                        // fprintf(stderr, "%u\n", pf_count_[c.ex.path().branches()[c.ex.path().constraints_idx()[idx]]]++;
                     }
                     set<branch_id_t> current_uncovered_branches;
                     for (const size_t &i: next_ex->path().constraints_idx()) {
@@ -2294,73 +2275,83 @@ void RandomCSSearch::Run() {
                             current_uncovered_branches.insert(paired_branch_[b]);
                         }
                     }
-                    set<branch_id_t> u;
-                    set_difference(
-                            current_uncovered_branches.begin(),
-                            current_uncovered_branches.end(),
-                            c.target_branches.begin(),
-                            c.target_branches.end(),
-                            std::inserter(u,u.end())
-                            );
+                    set<branch_id_t> u = current_uncovered_branches;
+                    // set_difference(
+                    //         current_uncovered_branches.begin(),
+                    //         current_uncovered_branches.end(),
+                    //         c.target_branches.begin(),
+                    //         c.target_branches.end(),
+                    //         std::inserter(u,u.end())
+                    //         );
+                    set<branch_id_t> tmp;
                     for(const EXContext &cc: Q) {
-                        set<branch_id_t> tmp;
-                        set_difference(
-                                u.begin(),
-                                u.end(),
-                                cc.target_branches.begin(),
-                                cc.target_branches.end(),
-                                std::inserter(tmp,tmp.end())
-                                );
-                        u = tmp;
+                      tmp.clear();
+                      set_difference(
+                              u.begin(),
+                              u.end(),
+                              cc.target_branches.begin(),
+                              cc.target_branches.end(),
+                              std::inserter(tmp,tmp.end())
+                              );
+                      u = tmp;
                     }
+                    // set<branch_id_t> tmp;
+                    tmp.clear();
+                    set_difference(
+                            u.begin(),
+                            u.end(),
+                            F.begin(),
+                            F.end(),
+                            std::inserter(tmp,tmp.end())
+                            );
+                    u = tmp;
                     if(u.size() > 0 ) {
-                      fprintf(stderr ,"uncovered branches size : %zu\n", u.size());
-
-                        SymbolicExecution *pe = new SymbolicExecution();
-                        next_ex->clone(*pe);
-                        Q.push_back(EXContext(pe, u));
-
-                       // SymbolicExecution
-                       //     Q.push_back(EXContext(next_ex, u));
+                        fprintf(stderr ,"uncovered branches size : %zu\n", u.size());
+                        SymbolicExecution *new_ex = new SymbolicExecution();
+                        next_ex->clone(*new_ex);
+                        Q.push_back(EXContext(new_ex, u));
                     }
-                    SymbolicExecution *pe = c.ex;
-                    c.ex = next_ex;
+                    SymbolicExecution *pe = ex;
+                    ex = next_ex;
                     next_ex = pe;
                 } else {
                     search_failed = true;
                     break;
                 }
             }
-            if(!search_failed
-                    && !c.target_branches.empty()
-                    && next_ex->path().branches() != c.ex->path().branches()) {
-                Q.push_back(EXContext(c.ex, c.target_branches,c.count));
-            }
-            else {
-                fprintf(stderr, "No enqueue again\n");
-                if (search_failed) {
-                    fprintf(stderr, "T1: search failed\n");
-                }
-                if (c.target_branches.empty()) {
-                    fprintf(stderr, "T2: target branches is empty\n");
-                }
-                if (next_ex->path().branches() == c.ex->path().branches()) {
-                    fprintf(stderr, "T3: branch is same\n");
-                }
-                delete c.ex;
-            }
-            // for (const branch_id_t &b: c.target_branches) {
-            //   if(covered_[b]) {
-            //     c.target_branches.remove(b);
-            //   }
-            // }
-            // for(set<int>::iterator it=uncovered_branches_.begin(); it!=uncovered_branches_.end(); ++it) {
-            //   if(covered_[*it]) {
-            //     uncovered_branches_.erase(it);
-            //   }
-            // }
-        }
+            delete ex;
 
+            set<branch_id_t> u;
+            set_difference(
+                    c.target_branches.begin(),
+                    c.target_branches.end(),
+                    covered_branches_.begin(),
+                    covered_branches_.end(),
+                    std::inserter(u,u.end())
+                    );
+            set<branch_id_t> tmp;
+            for(const EXContext &cc: Q) {
+              tmp.clear();
+                set_difference(
+                        u.begin(),
+                        u.end(),
+                        cc.target_branches.begin(),
+                        cc.target_branches.end(),
+                        std::inserter(tmp,tmp.end())
+                        );
+                u = tmp;
+            }
+            if(search_failed) {
+              fprintf(stderr, "search failed\n");
+              F.insert(c.target_branches.begin(), c.target_branches.end());
+              delete c.ex;
+            } else if ( u.empty() ) {
+              fprintf(stderr, "target branch is empty\n");
+              delete c.ex;
+            } else {
+              Q.push_back(EXContext(c.ex, u,c.count));
+            }
+        }
         delete next_ex;
     }
 }
@@ -2395,7 +2386,7 @@ void RandomCSSearch::Run() {
   ////////////////////////////////////////////////////////////////////////
   //// CfgHeuristicCSSearch //////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////
-
+/*
   size_t CfgHeuristicCSSearch::AssignEnergy(Context &c) {
       size_t energy = 0;
       set<branch_id_t> all_branches;
@@ -2420,10 +2411,10 @@ void RandomCSSearch::Run() {
 
      return  energy;
   }
-
+*/
   CfgHeuristicCSSearch::CfgHeuristicCSSearch(const string& program, int max_iterations) : Search(program, max_iterations),
       cfg_(max_branch_), cfg_rev_(max_branch_), dist_notusing(max_branch_) {
-
+    cur_ex_ = new SymbolicExecution();
     // Read in the CFG.
     ifstream in("cfg_branches", ios::in | ios::binary);
     assert(in);
@@ -2448,71 +2439,111 @@ void RandomCSSearch::Run() {
     }
   }
 
-  CfgHeuristicCSSearch::~CfgHeuristicCSSearch() { }
+  CfgHeuristicCSSearch::~CfgHeuristicCSSearch() {
+    delete cur_ex_;
+   }
 
   void CfgHeuristicCSSearch::UpdateCurContext() {
-    fprintf(stderr, "Size of Q : %u\n", Q.size() - num_no_target_contexts_);
-    fprintf(stderr, "cur energy : %u\n", Q[context_idx_].energy);
-    fprintf(stderr, "cur context : %u\n", context_idx_);
-    assert(Q.size()!=0);
-    if( Q[context_idx_].energy > 0) {
-      --Q[context_idx_].energy;
+    fprintf(stderr, "Size of Q : %u\n", Q.size());
+    fprintf(stderr, "cur energy : %u\n", Q.front().energy);
+    // assert(Q.size()!=0);
+    if( Q.front().energy > 0) {
+      --Q.front().energy;
     } else {
-      // energy is 0
-      // check all contexts are marked
-      while (Q.size()!=0) {
-        context_idx_ = (context_idx_ + 1) % Q.size();
-        bool is_all_contexts_failed = true;
-        for(Context &c : Q) {
-          if (!c.is_do_search_failed) {
-            is_all_contexts_failed = false;
-            break;
-          }
-        }
-        if(is_all_contexts_failed) {
-
-          return;
-        } else {
-
-        }
-        while (Q[context_idx_].is_do_search_failed) {
-          context_idx_ = (context_idx_ + 1) % Q.size();
-          fprintf(stderr, "cur context : %u\n", context_idx_);
-        }
-
-        Context &context = Q[context_idx_ % Q.size()];
-        // cur_context = Q[context_idx_];
+      if(Q.front().is_do_search_failed) {
+        F.insert(Q.front().target_branches.begin(), Q.front().target_branches.end());
+        Q.pop_front();
+      } else {
+        // only when search is not failed
         set<branch_id_t> target_branches;
-        //
-
-
         set_difference(
-          context.target_branches.begin(),
-          context.target_branches.end(),
+          cur_target_branches_.begin(),
+          cur_target_branches_.end(),
           covered_branches_.begin(),
           covered_branches_.end(),
           std::inserter(target_branches,target_branches.end())
         );
-        if(!target_branches.empty()) {
-          // fprintf(stderr, "333\n");
-          context.target_branches = target_branches;
-          context.energy = AssignEnergy(context);
-          // fprintf(stderr, "aaaa num_covered : %u\n", context.num_covered);
-          context.num_covered = num_covered_;
-          context.covered = covered_;
-          UpdateBranchDistances(context.covered, context.dist);
-          // fprintf(stderr, "current energy2 : %u\n", context.energy);
-          // fprintf(stderr, "current energy3 : %u\n", Q[context_idx_].energy);
-          // auto end = std::chrono::high_resolution_clock::now();
-          // elapsed_time_searching_7_ += (end - start);
-          // fprintf(stderr, "elapsed_time_searching_7 : %.5f\n", elapsed_time_searching_7_.count() );
-          return;
-        } else {
-          fprintf(stderr, "erase %u\n", context_idx_);
-          context.energy = 0;
-          context.is_do_search_failed = true;
-          num_no_target_contexts_++;
+        set<branch_id_t> u = target_branches;
+        set<branch_id_t> tmp;
+        for(size_t i = 1 ; i < Q.size(); i++) {
+          tmp.clear();
+          Context &cc = Q[i];
+          set_difference(
+            u.begin(),
+            u.end(),
+            cc.target_branches.begin(),
+            cc.target_branches.end(),
+            std::inserter(tmp,tmp.end())
+          );
+          u = tmp;
         }
+        tmp.clear();
+        set_difference(
+                u.begin(),
+                u.end(),
+                F.begin(),
+                F.end(),
+                std::inserter(tmp,tmp.end())
+                );
+        u = tmp;
+
+        if(u.empty()) {
+          Q.pop_front();
+        } else {
+          Q.emplace_back();
+          cur_ex_->clone(*Q.back().cur_ex);
+          Q.back().iters = Q.front().iters;
+          Q.back().covered = covered_;
+          Q.back().dist.resize(max_branch_, 0);
+          Q.back().target_branches = u;
+          Q.pop_front();
+        }
+      }
+      while (Q.size()!=0) {
+        // if(Q.front().is_do_search_failed) {
+        //   bool is_all_do_search_failed = true;
+        //   for(size_t i = 0; i < Q.size() ; i++) {
+        //     if(!Q[i].is_do_search_failed) {
+        //       is_all_do_search_failed = false;
+        //       fprintf(stderr, "cur energy : %u\n", Q.front().energy);
+        //       break;
+        //     }
+        //   }
+        //     if(is_all_do_search_failed) {
+        //       fprintf(stderr, "is_all_do_search_failed true\n");
+        //       while(!Q.empty()) {
+        //         Q.pop_back();
+        //       }
+        //       return;
+        //     }
+        //   Q.emplace_back();
+        //   Q.back().is_do_search_failed = true;
+        //   Q.back().target_branches = Q.front().target_branches;
+        //   Q.pop_front();
+        //   continue;
+        // }
+        set<branch_id_t> target_branches;
+        set_difference(
+          Q.front().target_branches.begin(),
+          Q.front().target_branches.end(),
+          covered_branches_.begin(),
+          covered_branches_.end(),
+          std::inserter(target_branches,target_branches.end())
+        );
+        // fprintf(stderr, "a Q size : %zu\n", Q.size());
+        if(target_branches.empty()) {
+          Q.pop_front();
+          continue;
+        }
+        Q.front().target_branches = target_branches;
+        delete cur_ex_;
+        cur_ex_ = new SymbolicExecution();
+        Q.front().cur_ex->clone(*cur_ex_);
+        Q.front().energy = 200;
+        Q.front().num_covered = num_covered_;
+        Q.front().covered = covered_;
+        UpdateBranchDistances(Q.front().covered, Q.front().dist);
+        return;
       }
     }
   }
@@ -2520,22 +2551,24 @@ void RandomCSSearch::Run() {
   void CfgHeuristicCSSearch::GetNewTargetBranches(SymbolicExecution &next_ex,set<branch_id_t> &u){
     // auto start = std::chrono::high_resolution_clock::now();
     set<branch_id_t> current_uncovered_branches;
+    // {bar(b)|b\inB'} - C
     for (const size_t &i: next_ex.path().constraints_idx()) {
       branch_id_t b = next_ex.path().branches()[i];
       if(!covered_[paired_branch_[b]]) {
-      current_uncovered_branches.insert(paired_branch_[b]);
+        u.insert(paired_branch_[b]);
       }
     }
-    set_difference(
-       current_uncovered_branches.begin(),
-       current_uncovered_branches.end(),
-       covered_branches_.begin(),
-       covered_branches_.end(),
-       std::inserter(u,u.end())
-      );
-      //
-    for(const Context &c: Q) {
-      set<branch_id_t> tmp;
+    fprintf(stderr, "u\n");
+    for(branch_id_t b : u) {
+        fprintf(stderr, "%d ", b);
+    }
+    fprintf(stderr, "\n");
+    // fprintf(stderr, "u size %zu\n", u.size());
+      // // T' <- {t\inT''| (phi'',T'')\in Q}
+    set<branch_id_t> tmp;
+    for(size_t i = 1; i < Q.size(); i++) {
+      Context &c = Q[i];
+      tmp.clear();
       set_difference(
          u.begin(),
          u.end(),
@@ -2545,92 +2578,85 @@ void RandomCSSearch::Run() {
         );
         u = tmp;
     }
-    // auto end = std::chrono::high_resolution_clock::now();
-    // elapsed_time_searching_3_ += (end - start);
-    //
+    tmp.clear();
+    set_difference(
+            u.begin(),
+            u.end(),
+            F.begin(),
+            F.end(),
+            std::inserter(tmp,tmp.end())
+            );
+    u = tmp;
+    // fprintf(stderr, "NewTargetBranches\n");
+    // for(branch_id_t b : u) {
+    //     fprintf(stderr, "%u ", b);
+    // }
+    // fprintf(stderr, "\n");
+    // fprintf(stderr, "u size 2 %zu\n", u.size());
   }
 
   void CfgHeuristicCSSearch::Run() {
-    // v_context_.resize(input_file_names_.size());
     num_covered_ = 0;
-    // string names[] = {"input1", "input10", "input2", "input3", "input4", "input5", "input6", "input7", "input8", "input9"};
-    string names[] = {"input1", "input10", "input2", "input3", "input4", "input5", "input6", "input7", "input8", "input9"};
-    // deque<Context> Q;
-    // size_t context_idx = 0;
     covered_.resize(max_branch_, false);
     max_Q_size = 0;
     while(true) {
       {
-        // check all contexts are marked
-
-        bool is_all_contexts_failed = true;
-        for(Context &c : Q) {
-          if (!c.is_do_search_failed) {
-            is_all_contexts_failed = false;
-            break;
-          }
-        }
-
-        // RESET Search
-        if (is_all_contexts_failed) {
+        if (Q.empty()) {
           fprintf(stderr, "RESET Search\n");
-          // system("rm -r inputs");
-          // system("cp -r seeds inputs");
           system("cp -r seeds/input1 input");
-          if(is_save_testcases_option_) {
-            // string s = "touch testcases/input" + std::to_string(num_iters_ + 1);
-            string s = "cp seeds/input1 testcases/input" + std::to_string(num_iters_+1);
-            std::cerr << s << '\n';
-            system(s.c_str());
-          }
-          // RESET global data structures
-          // Q.clear();
           num_no_target_contexts_ = 0;
           Q = deque<Context>();
-          context_idx_ = 0;
-          // pf_count_.clear();
+          F.clear();
           covered_branches_.clear();
           covered_.assign(max_branch_, false);
           Q.emplace_back();
           Context &new_context = Q.front();
           new_context.covered.resize(max_branch_, false);
           new_context.dist.resize(max_branch_, 0);
-          RunProgram(vector<value_t>(), &new_context.cur_ex);
-          for(BranchIt i = new_context.cur_ex.path().branches().begin(); i!=new_context.cur_ex.path().branches().end(); i++) {
-            new_context.target_branches.insert(*i);
+          RunProgram(vector<value_t>(), new_context.cur_ex);
+          fprintf(stderr, "Uncovered Branch:\n");
+          UpdateCoverage(*new_context.cur_ex, new_context);
+          for (const size_t &i: new_context.cur_ex->path().constraints_idx()) {
+              branch_id_t b = new_context.cur_ex->path().branches()[i];
+              if(!covered_[paired_branch_[b]]) {
+                new_context.target_branches.insert(paired_branch_[b]);
+                fprintf(stderr, "%d ", paired_branch_[b]);
+              }
           }
-          if (UpdateCoverage(new_context.cur_ex, new_context) ) {
-            // fprintf(stderr, "found new branch\n");
-          } else {
-            // fprintf(stderr, "not found new branch\n");
-          }
-
+          fprintf(stderr, "\n");
+          cur_target_branches_ = new_context.target_branches;
+          delete cur_ex_;
+          cur_ex_ = new SymbolicExecution();
+          new_context.cur_ex->clone(*cur_ex_);
           UpdateBranchDistances(new_context.covered, new_context.dist);
           UpdateCurContext();
-        }
-        if(Q[context_idx_].stack_sub_context.empty()) {
 
+        }
+        fprintf(stderr, "Q . iters = %u\n",Q.front().iters);
+        if(Q.front().stack_sub_context.empty()) {
+          // fprintf(stderr, "2 size of Q = %zu\n",Q.size());
           // auto start = std::chrono::high_resolution_clock::now();
           if(DoSearchOnce()) {
-            // Context &cur_context = Q[context_idx_];
-            Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
-            Q[context_idx_].iters=30;
-            Q[context_idx_].cur_idx = 0;
-            Q[context_idx_].scoredBranches.clear();
-            Q[context_idx_].do_search_once_found_new_branch = false;
-            Q[context_idx_].new_branches.clear();
-            Q[context_idx_].covered = covered_;
-
-            UpdateBranchDistances(Q[context_idx_].covered, Q[context_idx_].dist);
+            SymbolicExecution *tmp = Q.front().latest_success_ex;
+            Q.front().latest_success_ex = Q.front().cur_ex;
+            Q.front().cur_ex = tmp;
+            Q.front().iters=30;
+            Q.front().cur_idx = 0;
+            Q.front().scoredBranches.clear();
+            Q.front().do_search_once_found_new_branch = false;
+            Q.front().new_branches.clear();
+            Q.front().covered = covered_;
+            UpdateBranchDistances(Q.front().covered, Q.front().dist);
             UpdateCurContext();
 
           } else {
             // 1. 새로운 브랜치를 못찾고, prediction failure
             // 2. FindAlongCfg 성공후 stack에 추가
             // 3. Do search fail ( execution 종료)
-            if (Q[context_idx_].is_do_search_failed) {
-              fprintf(stderr, "do search failed skip %u\n", context_idx_);
-              Q[context_idx_].energy = 0;
+            if (Q.front().is_do_search_failed) {
+              Q.front().energy =0;
+              fprintf(stderr, "Search is failed. pop\n");
+              // Q.pop_front();
               UpdateCurContext();
             }
           }
@@ -2641,42 +2667,46 @@ void RandomCSSearch::Run() {
           // fprintf(stderr,"stack is not empty\n");
 
           if(!SolveOnePathAlongCfg()) {
-            if(!Q[context_idx_].stack_sub_context.empty()) {
+            if(!Q.front().stack_sub_context.empty()) {
                 // Keep solve one path along cfg
                 UpdateCurContext();
             } else { // stack is empty
-              if(Q[context_idx_].do_search_once_found_new_branch) {
-                 Q[context_idx_].covered = covered_;
-                 UpdateBranchDistances(Q[context_idx_].covered, Q[context_idx_].dist);
-                 Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
-                 Q[context_idx_].new_branches.clear();
-                 Q[context_idx_].scoredBranches.clear();
-                 Q[context_idx_].iters=30;
-                 Q[context_idx_].cur_idx = 0;
-
+              if(Q.front().do_search_once_found_new_branch) {
+                 Q.front().covered = covered_;
+                 UpdateBranchDistances(Q.front().covered, Q.front().dist);
+                 SymbolicExecution *tmp = Q.front().cur_ex;
+                 Q.front().cur_ex = Q.front().latest_success_ex;
+                 Q.front().latest_success_ex = tmp;
+                 Q.front().new_branches.clear();
+                 Q.front().scoredBranches.clear();
+                 Q.front().iters=30;
+                 Q.front().cur_idx = 0;
                  UpdateCurContext();
               } else {
-
-                Q[context_idx_].cur_idx++;
+                Q.front().cur_idx++;
                 UpdateCurContext();
               }
-              Q[context_idx_].do_search_once_found_new_branch = false;
+              Q.front().do_search_once_found_new_branch = false;
             }
           } else {
             // Solve One Path Along Cfg Success
             // We empty the stack
-            std::stack<SubContext*> &stack = Q[context_idx_].stack_sub_context;
+            std::stack<SubContext*> &stack = Q.front().stack_sub_context;
             while(!stack.empty()) {
               delete stack.top();
               stack.pop();
             }
 
-            UpdateBranchDistances(Q[context_idx_].covered, Q[context_idx_].dist);
-            Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
-            Q[context_idx_].scoredBranches.clear();
-            Q[context_idx_].new_branches.clear();
-            Q[context_idx_].cur_idx = 0;
-            Q[context_idx_].iters=30;
+            UpdateBranchDistances(Q.front().covered, Q.front().dist);
+            // Q[context_idx_].cur_ex.Swap(Q[context_idx_].latest_success_ex);
+            SymbolicExecution *tmp = Q.front().cur_ex;
+            Q.front().cur_ex = Q.front().latest_success_ex;
+            Q.front().latest_success_ex = tmp;
+
+            Q.front().scoredBranches.clear();
+            Q.front().new_branches.clear();
+            Q.front().cur_idx = 0;
+            Q.front().iters=30;
             UpdateCurContext();
           }
         }
@@ -2691,7 +2721,6 @@ void RandomCSSearch::Run() {
     // auto start = std::chrono::high_resolution_clock::now();
     queue<branch_id_t> Q;
     for (BranchIt i = branches_.begin(); i != branches_.end(); ++i) {
-      // if (!all_covered_[*i]) {
       if (!covered[*i]) {
         dist[*i] = 0;
         Q.push(*i);
@@ -2713,113 +2742,102 @@ void RandomCSSearch::Run() {
       }
     }
 
-    // auto end = std::chrono::high_resolution_clock::now();
-    // elapsed_time_searching_1_ += (end - start);
-    // fprintf(stderr, "elapsed_time_searching_1(UpdateBranchDistances) : %.2f\n", elapsed_time_searching_1_.count() );
   }
-
 
   bool CfgHeuristicCSSearch::DoSearchOnce() {
     // Context &context = Q[context_idx_];
-    if(Q[context_idx_].scoredBranches.empty()) {
+    if(Q.front().scoredBranches.empty()) {
       // fprintf(stderr, "scoredBranches is empty\n");
       // auto start = std::chrono::high_resolution_clock::now();
-      Q[context_idx_].covered = covered_;
-      Q[context_idx_].scoredBranches.resize(Q[context_idx_].cur_ex.path().constraints().size());
-      for (size_t i = 0; i < Q[context_idx_].scoredBranches.size(); i++) {
-        Q[context_idx_].scoredBranches[i].first = i;
+      Q.front().covered = covered_;
+      Q.front().scoredBranches.resize(Q.front().cur_ex->path().constraints().size());
+      for (size_t i = 0; i < Q.front().scoredBranches.size(); i++) {
+        Q.front().scoredBranches[i].first = i;
       }
 
       { // Compute (and sort by) the scores.
          // fprintf(stderr,"start computing scores\n");
-        random_shuffle(Q[context_idx_].scoredBranches.begin(), Q[context_idx_].scoredBranches.end());
+        random_shuffle(Q.front().scoredBranches.begin(), Q.front().scoredBranches.end());
         map<branch_id_t,int> seen;
-        for (size_t i = 0; i < Q[context_idx_].scoredBranches.size(); i++) {
+        for (size_t i = 0; i < Q.front().scoredBranches.size(); i++) {
           // fprintf(stderr, "%u ", i);
-          size_t idx = Q[context_idx_].scoredBranches[i].first;
+          size_t idx = Q.front().scoredBranches[i].first;
 
-          size_t branch_idx = Q[context_idx_].cur_ex.path().constraints_idx()[idx];
+          size_t branch_idx = Q.front().cur_ex->path().constraints_idx()[idx];
 
-          branch_id_t bid = paired_branch_[Q[context_idx_].cur_ex.path().branches()[branch_idx]];
-          Q[context_idx_].scoredBranches[i].second = Q[context_idx_].dist[bid] + seen[bid];
+          branch_id_t bid = paired_branch_[Q.front().cur_ex->path().branches()[branch_idx]];
+          Q.front().scoredBranches[i].second = Q.front().dist[bid] + seen[bid];
           seen[bid] += 1;
         }
       }
       // fprintf(stderr, "\n");
 
-      stable_sort(Q[context_idx_].scoredBranches.begin(), Q[context_idx_].scoredBranches.end(), ScoredBranchComp());
-
-      // auto end = std::chrono::high_resolution_clock::now();
-      // elapsed_time_searching_6_ += (end - start);
-      // fprintf(stderr, "elapsed_time_searching_6(scored branch calculate) : %.2f\n", elapsed_time_searching_6_.count() );
-
-    } else {
-
+      stable_sort(Q.front().scoredBranches.begin(), Q.front().scoredBranches.end(), ScoredBranchComp());
     }
 
     // Solve.
     SymbolicExecution new_ex;
     vector<value_t> input;
     // for (size_t i = 0; i < scoredBranches.size(); i++) {
-    while(Q[context_idx_].cur_idx < Q[context_idx_].scoredBranches.size()) {
+    while(Q.front().cur_idx < Q.front().scoredBranches.size()) {
 
-      if ((Q[context_idx_].iters <= 0) ||
-       (Q[context_idx_]
-         .scoredBranches[Q[context_idx_]
-         .cur_idx]
+      if ((Q.front().iters <= 0) ||
+       (Q.front()
+         .scoredBranches[Q.front().cur_idx]
          .second > kInfiniteDistance)) {
-            Q[context_idx_].is_do_search_failed = true;
+            Q.front().is_do_search_failed = true;
 
             return false;
       }
       num_inner_solves_ ++;
 
-      if (!SolveAtBranch(Q[context_idx_].cur_ex, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].first, &input)) { // Unsat
+      if (!SolveAtBranch(*Q.front().cur_ex, Q.front().scoredBranches[Q.front().cur_idx].first, &input)) { // Unsat
 
-        Q[context_idx_].cur_idx++;
+        Q.front().cur_idx++;
         continue;
       }
       RunProgram(input, &new_ex);
+      Q.front().iters--;
 
-      Q[context_idx_].iters--;
-
-      // fprintf(stderr, "iters = %d\n", Q[context_idx_].iters);
-
-      size_t b_idx = Q[context_idx_].cur_ex.path().constraints_idx()[Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].first];
-      branch_id_t bid = paired_branch_[Q[context_idx_].cur_ex.path().branches()[b_idx]];
-      bool found_new_branch = UpdateCoverage(new_ex, &(Q[context_idx_].new_branches), Q[context_idx_]);
+      size_t b_idx = Q.front().cur_ex->path().constraints_idx()[Q.front().scoredBranches[Q.front().cur_idx].first];
+      branch_id_t bid = paired_branch_[Q.front().cur_ex->path().branches()[b_idx]];
+      bool found_new_branch = UpdateCoverage(new_ex, &(Q.front().new_branches), Q.front());
       set<branch_id_t> new_target_branches;
       GetNewTargetBranches(new_ex, new_target_branches);
       if(!new_target_branches.empty()) {
-          Context &newContext = *(Q.emplace(Q.begin() + context_idx_));
-          newContext.target_branches = new_target_branches;
-          Q[context_idx_ + 1].clone(newContext);
-          context_idx_++;
+          Q.emplace_back();
+          Q.back().target_branches = new_target_branches;
+          Q.front().clone(Q.back());
+          fprintf(stderr, "new branch size is %zu\n",Q.front().target_branches.size());
       }
-      bool prediction_failed = !CheckPrediction(Q[context_idx_].cur_ex, new_ex, b_idx);
+      bool prediction_failed = !CheckPrediction(*Q.front().cur_ex, new_ex, b_idx);
       if (found_new_branch && prediction_failed) {
         num_inner_lucky_successes_ ++;
         num_inner_successes_pred_fail_ ++;
-
-        Q[context_idx_].latest_success_ex.Swap(new_ex);
+        // new_ex.clone(*Q.front().latest_success_ex);
+        Q.front().latest_success_ex->Swap(new_ex);
         return true;
       }
       if (found_new_branch && !prediction_failed) {
-        size_t min_dist = MinCflDistance(b_idx, new_ex, Q[context_idx_].new_branches);
-        if (FindAlongCfg(b_idx, Q[context_idx_].dist[bid], new_ex, Q[context_idx_].new_branches)) {
-        	assert(min_dist <= Q[context_idx_].dist[bid]);
-        	if (Q[context_idx_].dist[bid] == 0) {
+        size_t min_dist = MinCflDistance(b_idx, new_ex, Q.front().new_branches);
+        if (FindAlongCfg(b_idx, Q.front().dist[bid], new_ex, Q.front().new_branches)) {
+        	assert(min_dist <= Q.front().dist[bid]);
+        	if (Q.front().dist[bid] == 0) {
         	  num_inner_zero_successes_ ++;
         	} else {
         	  num_inner_nonzero_successes_ ++;
         	}
-        	Q[context_idx_].latest_success_ex.Swap(new_ex);
+          new_ex.Swap(*Q.front().latest_success_ex);
+          // delete Q.front().latest_success_ex;
+          // Q.front().latest_success_ex = new SymbolicExecution();
+          // new_ex.clone(*Q.front().latest_success_ex);
+        	// Q[context_idx_].latest_success_ex.Swap(new_ex);
         	return true;
         } else {
         	// We got lucky, but as long as there were no prediction failures,
         	// we'll finish the CFG search to see if that works, too.
-        	assert(min_dist > Q[context_idx_].dist[bid]);
-        	assert(Q[context_idx_].dist[bid] != 0);
+        	assert(min_dist > Q.front().dist[bid]);
+        	assert(Q.front().dist[bid] != 0);
         	num_inner_lucky_successes_ ++;
         }
       }
@@ -2827,7 +2845,7 @@ void RandomCSSearch::Run() {
         fprintf(stderr, "Prediction failed.\n");
         if (!found_new_branch) {
   	      num_inner_pred_fails_ ++;
-           Q[context_idx_].cur_idx++;
+           Q.front().cur_idx++;
            UpdateCurContext();
            return false;
         }
@@ -2835,26 +2853,28 @@ void RandomCSSearch::Run() {
       num_top_solves_ ++;
       num_top_solve_successes_ ++;
       // Q[context_idx_].stack_sub_context.push(SubContext(b_idx, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second -1));
-      Q[context_idx_].stack_sub_context.push(new SubContext(b_idx, Q[context_idx_].scoredBranches[Q[context_idx_].cur_idx].second -1, &new_ex));
+      Q.front().stack_sub_context.push(new SubContext(b_idx, Q.front().scoredBranches[Q.front().cur_idx].second -1, &new_ex));
       // new_ex.clone((Q[context_idx_].stack_sub_context.top().cur_ex));
       if (found_new_branch) {
-        Q[context_idx_].latest_success_ex.Swap(new_ex);
-        Q[context_idx_].do_search_once_found_new_branch = true;
+        new_ex.Swap(*Q.front().latest_success_ex);
+        // new_ex.clone(*Q.front().latest_success_ex);
+        // Q[context_idx_].latest_success_ex.Swap(new_ex);
+        Q.front().do_search_once_found_new_branch = true;
       } else {
-        Q[context_idx_].do_search_once_found_new_branch = false;
+        Q.front().do_search_once_found_new_branch = false;
       }
       return false;
     }
     // context.is_reset = true;
     // fprintf(stderr,"set context[%d]'s is_dosearch filed true",input_file_idx_);
-    Q[context_idx_].is_do_search_failed = true;
+    Q.front().is_do_search_failed = true;
     return false;
   }
 
 
   bool CfgHeuristicCSSearch::SolveOnePathAlongCfg() {
     // Context &context = Q[context_idx_];
-    stack<SubContext*>&stack = Q[context_idx_].stack_sub_context;
+    stack<SubContext*>&stack = Q.front().stack_sub_context;
     vector<value_t> input;
     while(!stack.empty()) {
       SubContext& sc = *(stack.top());
@@ -2876,8 +2896,8 @@ void RandomCSSearch::Run() {
           for (size_t j = 0; j < sc.idxs.size(); j++) {
             //    fprintf(stderr, " %d(%u,%u,%u)", path[sc.idxs[j]], sc.idxs[j],
             //       context.dist[path[sc.idxs[j]]], context.dist[paired_branch_[path[sc.idxs[j]]]]);
-            if ((Q[context_idx_].dist[path[sc.idxs[j]]] <= sc.dist)
-                || (Q[context_idx_].dist[paired_branch_[path[sc.idxs[j]]]] <= sc.dist))
+            if ((Q.front().dist[path[sc.idxs[j]]] <= sc.dist)
+                || (Q.front().dist[paired_branch_[path[sc.idxs[j]]]] <= sc.dist))
               found_path = true;
           }
            //  fprintf(stderr, "\n");
@@ -2900,22 +2920,15 @@ void RandomCSSearch::Run() {
         for(int i = 0 ;i  < sc.idxs.size(); i++) {
           // fprintf(stderr,"idxs[%d]:%d\n", i, sc.idxs[i]);
         }
-        // sc.b_idx = 0;
-
-         // should set dist, current index -1,
-
       } else if (sc.idxs.size() > 0 && sc.b_idx < sc.idxs.size()) {
-        // fprintf(stderr, "b_idx = %u\n", sc.b_idx);
-        // fprintf(stderr, "dist_[%d](%u), sc.dist(%u)\n", sc.idxs[sc.b_idx], dist_[path[sc.idxs[sc.b_idx]]],sc.dist);
-
         // point next index
-        if((Q[context_idx_].dist[path[sc.idxs[sc.b_idx]]] > sc.dist && (Q[context_idx_].dist[paired_branch_[path[sc.idxs[sc.b_idx]]]] > sc.dist))) {
+        if((Q.front().dist[path[sc.idxs[sc.b_idx]]] > sc.dist && (Q.front().dist[paired_branch_[path[sc.idxs[sc.b_idx]]]] > sc.dist))) {
             // fprintf(stderr, "dist_[%d](%u) > sc.dist(%u)\n", sc.idxs[sc.b_idx], dist_[path[sc.idxs[sc.b_idx]]],sc.dist);
             sc.b_idx++;
             continue;
         }
 
-        if (Q[context_idx_].dist[path[sc.idxs[sc.b_idx]]] <= sc.dist ) {
+        if (Q.front().dist[path[sc.idxs[sc.b_idx]]] <= sc.dist ) {
             // fprintf(stderr, "dist_[%d](%u) <= sc.dist(%u)\n", sc.idxs[sc.b_idx], dist_[path[sc.idxs[sc.b_idx]]],sc.dist);
 
               if(sc.seen.find(sc.b_idx)== sc.seen.end()) {
@@ -2926,11 +2939,7 @@ void RandomCSSearch::Run() {
                   // sc.cur_ex.clone(stack.top().cur_ex);
                   continue;
              //   }
-              } else {
-                // fprintf(stderr,"already seen %d\n", sc.b_idx);
               }
-
-            // sc.b_idx++;
         }
 
         // Find the constraint corresponding to branch idxs[*j].
@@ -2940,7 +2949,6 @@ void RandomCSSearch::Run() {
           lower_bound( sc.cur_ex->path().constraints_idx().begin(),
            sc.cur_ex->path().constraints_idx().end(), sc.idxs[sc.b_idx]);
         for(int i = 0 ; i <  sc.cur_ex->path().constraints_idx().size(); i++) {
-
           // fprintf(stderr, " constraint[%d] = %d\n", i, sc.cur_ex.path().constraints_idx()[i]);
         }
         if ((idx ==  sc.cur_ex->path().constraints_idx().end()) || (*idx != sc.idxs[sc.b_idx])) {
@@ -2950,33 +2958,27 @@ void RandomCSSearch::Run() {
         }
            // fprintf(stderr, "branch is not concrete\n");
         size_t c_idx = idx -  sc.cur_ex->path().constraints_idx().begin();
-        if(Q[context_idx_].dist[paired_branch_[path[sc.idxs[sc.b_idx]]]] <= sc.dist) {
+        if(Q.front().dist[paired_branch_[path[sc.idxs[sc.b_idx]]]] <= sc.dist) {
           if (!SolveAtBranch(*sc.cur_ex, c_idx, &input)) {
             sc.b_idx++;
             continue;
           }
           RunProgram(input, &new_ex);
-          bool found_new_branch = UpdateCoverage(new_ex, Q[context_idx_]);
-
+          bool found_new_branch = UpdateCoverage(new_ex, Q.front());
+          //
           set<branch_id_t> new_target_branches;
           GetNewTargetBranches(new_ex, new_target_branches);
           if(!new_target_branches.empty()) {
-            Context &newContext = *(Q.emplace(Q.begin() + context_idx_));
-            newContext.target_branches = new_target_branches;
-            Q[context_idx_ + 1].clone(newContext);
-            context_idx_++;
-            // std::stack<SubContext*> tmp = std::move(Q[context_idx_].stack_sub_context);
-            // Context &newContext = *(Q.emplace(Q.begin() + context_idx_));
-            // Q[context_idx_ + 1].clone(newContext);
-            // Q[context_idx_ + 1].stack_sub_context = std::move(tmp);
-            // Q[context_idx_].target_branches = new_target_branches;
-            // context_idx_++;
+              Q.emplace_back();
+              Q.back().target_branches = new_target_branches;
+              Q.front().clone(Q.back());
           }
 
           if(found_new_branch) {
-          // if(!new_target_branches.empty() && Q.size() < 5) {
-            Q[context_idx_].latest_success_ex.Swap(new_ex);
-            // Q[context_idx_].stack_sub_context = std::stack<SubContext>();
+            new_ex.Swap(*Q.front().latest_success_ex);
+            // delete Q.front().latest_success_ex;
+            // Q.front().latest_success_ex = new SymbolicExecution();
+            // new_ex.clone(*Q.front().latest_success_ex);
             return true;
           }
 
