@@ -11,62 +11,140 @@
 #include <assert.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <getopt.h>
+// #include <unistd.h>
 
 #include "run_crest/concolic_search.h"
 
+void print_help() {
+  fprintf(stderr,
+    "Syntax: run_crest <program> "
+    "<number of iterations> "
+    "-<strategy> [strategy options]\n");
+    fprintf(stderr,
+      "  Strategies include: "
+      "dfs, cfg, md_cfg, random, md_random, uniform_random, random_input \n");
+}
+
+
+struct option long_options[] =
+{
+    {"random_input", no_argument, 0, 0},
+    {"dfs", optional_argument, 0, 'd'},
+    {"cfg", no_argument, 0, 0},
+    {"md_cfg", optional_argument, 0, 0},
+    {"random", no_argument, 0, 0},
+    {"md_random", optional_argument, 0, 0},
+    {"cfg_baseline", no_argument, 0, 0},
+    {"hybrid", no_argument, 0, 0},
+    {"uniform_random", optional_argument, 0, 0},
+    {0,0,0,0}
+};
+
 int main(int argc, char* argv[]) {
-  if (argc < 3) {
-    fprintf(stderr,
-            "Syntax: run_crest <program> "
-            "<number of iterations> "
-            "-<strategy> [strategy options]\n");
-    fprintf(stderr,
-            "  Strategies include: "
-            "dfs, cfg, random, uniform_random, random_input \n");
-    return 1;
-  }
-  char *time_out = "10000000";
-
-  string prog = argv[1];
-  int num_iters = atoi(argv[2]);
-  string search_type = argv[3];
-  // int execution_time = 1800;
-  int execution_time = 600;
-  if(argc==5) {
-   execution_time = atoi(argv[4]);
-  }
-  string command = argv[2];
-
+  int opt;
+  int option_index = 0;
   // Initialize the random number generator.
   struct timeval tv;
   gettimeofday(&tv, NULL);
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
-  // srand(20201109);
-string input_directory_name ="";
+
+  char *depth = 0;
+  char *time_out = "1000000";
+
+  string search_type = "";
+  string log_file_name = "";
+  string summary_file_name = "";
+
+  if (argc < 4) {
+    print_help();
+    return 1;
+  }
+
+  while ((opt = getopt_long_only(argc,
+                                 argv,
+                                 "l:s:t:d:",
+                                  long_options,
+                                  &option_index)) != EOF) {
+    switch(opt) {
+      case 0: // with short options
+        if(search_type!="") {
+          print_help();
+          return 1;
+        }
+        search_type = long_options[option_index].name;
+        break;
+      case 's': // s for summury
+        if (optarg) {
+            fprintf(stderr, "summary : %s\n", optarg);
+            summary_file_name = optarg;
+        } else {
+            fprintf(stderr, "Enter summary file name\n");
+            return 1;
+        }
+        break;
+      case 'l': // l for log
+        if (optarg) {
+          fprintf(stderr, "log : %s\n", optarg);
+          log_file_name = optarg;
+        } else {
+          fprintf(stderr, "Enter log file name\n");
+          return 1;
+        }
+        break;
+      case 't':
+        if (optarg) {
+            time_out = optarg;
+        } else {
+            fprintf(stderr, "Enter time out (in secs)\n");
+            return 1;
+        }
+        break;
+      case 'd':
+        // see https://stackoverflow.com/questions/1052746/getopt-does-not-parse-optional-arguments-to-parameters
+        search_type = "dfs";
+        if (!optarg
+            && optind < argc
+            && NULL != argv[optind]
+            && '\0' != argv[optind][0]
+            && '-' != argv[optind][0]) {
+            depth = argv[optind++];
+            fprintf(stderr, "depth : %s\n",depth);
+        } else {
+          depth = 0;
+        }
+        break;
+      default: // not correct inputs
+        print_help();
+        return 1;
+    }
+  }
+  char *prog = argv[optind++];
+  int num_iters = atoi(argv[optind++]);
+
   crest::Search* strategy;
+
+  // system("rm si_time");
+  bool is_run_directory_option = false;
+
+  fprintf(stderr, "program : [%s]\n", prog);
+
+  fprintf(stderr, "num_iters : [%d]\n", num_iters);
+
+  fprintf(stderr, "search_type : [%s]\n", search_type.c_str());
+  fprintf(stderr, "argc %d\n",argc);
+  fprintf(stderr, "argv[%d] : %s\n",optind, argv[optind]);
+  exit(0);
+
   system("rm -r inputs");
   system("cp -r seeds inputs");
   system("cp seeds/input1 input");
-  system("rm -r se");
-  system("mkdir se");
   system("rm summary* log*");
-  system("rm -r coverages");
-  system("mkdir coverages");
-  // system("rm si_time");
-
-
-  bool is_run_directory_option = false;
 
   if (search_type == "-random") {
     strategy = new crest::RandomSearch(prog, num_iters);
-  } else if (search_type == "-es_random") {
-    strategy = new crest::RandomESSearch(prog, num_iters);
   } else if (search_type == "-cs_random") {
     strategy = new crest::RandomCSSearch(prog, num_iters);
-  } else if (search_type == "-cs_random2") {
-    strategy = new crest::RandomCSSearch(prog, num_iters);
-  } else if (search_type == "-random_input") {
-    strategy = new crest::RandomInputSearch(prog, num_iters);
   } else if (search_type == "-dfs") {
     if (argc == 4) {
       strategy = new crest::BoundedDepthFirstSearch(prog, num_iters, 1000000);
@@ -79,6 +157,8 @@ string input_directory_name ="";
     strategy = new crest::CfgHeuristicSearch(prog, num_iters);
   } else if (search_type == "-cfg_baseline") {
     strategy = new crest::CfgBaselineSearch(prog, num_iters);
+  } else if (search_type == "-random_input") {
+    strategy = new crest::RandomInputSearch(prog, num_iters);
   } else if (search_type == "-hybrid") {
     strategy = new crest::HybridSearch(prog, num_iters, 100);
   } else if (search_type == "-uniform_random") {
@@ -87,29 +167,10 @@ string input_directory_name ="";
     } else {
       strategy = new crest::UniformRandomSearch(prog, num_iters, atoi(argv[4]));
     }
-  } else if (command == "-r") {
-    is_run_directory_option = true;
-    strategy = new crest::Runner(prog, num_iters);
-    fprintf(stderr, "Unknown search strategy: %s\n", search_type.c_str());
-    input_directory_name = argv[3];
-  } else {
-    fprintf(stderr, "Unknown search strategy: %s\n", search_type.c_str());
-    return 1;
   }
-  strategy->SetTimeOut(execution_time);
 
-  if (is_run_directory_option) {
-    strategy -> RunDirectory(input_directory_name.c_str());
-  } else {
-    strategy->SetIsSaveTestcasesOption(false);
-    // system("touch testcases/input1");
-
-    if( search_type == "-cs_random2") {
-      strategy-> Run2();
-    } else {
-      strategy->Run();
-    }
-  }
+  // strategy->SetTimeOut(execution_time);
+  strategy->Run();
 
   delete strategy;
   return 0;
