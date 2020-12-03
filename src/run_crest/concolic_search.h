@@ -94,7 +94,6 @@ public:
 
 class Context {
 public:
-
   Context() {
     // fprintf(stderr, "Context constructor (no parama)\n");
     cur_ex = new SymbolicExecution();
@@ -161,13 +160,20 @@ class Search {
       time_out_ = time_out;
   }
 
-
-  void SetIsSaveTestcasesOption(bool is_save_testcases_option) {
-    is_save_testcases_option_ = is_save_testcases_option;
+  void SetLogFileName(char *log_file_name) {
+    log_file_name_ = log_file_name;
   }
-    void RunDirectory(const char *input_directory_name);
-    void PrintPathConstraint(const SymbolicPath &symbolic_path);
-    void Run2(){};
+  void SetSummaryFileName(char *summary_file_name) {
+    summary_file_name_ = summary_file_name;
+  }
+
+  char *log_file_name_;
+  char *summary_file_name_;
+
+  void RunDirectory(const char *input_directory_name);
+  void PrintPathConstraint(const SymbolicPath &symbolic_path);
+  void ResetInitialInputFiles();
+
  protected:
    map<size_t, size_t> pf_count_;
    map<size_t, size_t> unsat_count_;
@@ -197,22 +203,7 @@ class Search {
   std::chrono::high_resolution_clock::time_point begin_total_;
   std::chrono::high_resolution_clock::time_point end_total_;
   std::chrono::duration<double> elapsed_time_total_;
-  std::chrono::duration<double> elapsed_time_searching_1_;
-  std::chrono::duration<double> elapsed_time_searching_2_;
-  std::chrono::duration<double> elapsed_time_searching_3_;
-  std::chrono::duration<double> elapsed_time_searching_4_;
-  std::chrono::duration<double> elapsed_time_searching_5_;
-  std::chrono::duration<double> elapsed_time_searching_6_;
-  std::chrono::duration<double> elapsed_time_searching_7_;
-  std::chrono::duration<double> elapsed_time_searching_8_;
-  std::chrono::duration<double> elapsed_time_searching_9_;
-  std::chrono::duration<double> elapsed_time_searching_10_;
-  std::chrono::duration<double> elapsed_time_searching_11_;
-  std::chrono::duration<double> elapsed_time_solving_;
-  std::chrono::duration<double> elapsed_time_program_;
-  std::chrono::duration<double> elapsed_time_copy_;
-  std::chrono::duration<double> elapsed_time_update_;
-  std::chrono::duration<double> elapsed_time_szd_read_;
+
   typedef vector<branch_id_t>::const_iterator BranchIt;
 
   bool SolveAtBranch(const SymbolicExecution& ex,
@@ -230,17 +221,9 @@ class Search {
 
   void RandomInput(const map<var_t,type_t>& vars, vector<value_t>* input);
 
-
-  int input_file_idx_;
-  int rotation_count_;
-
-  vector<string> input_file_names_;
-  void read_directory(const std::string& name, vector<string>& v);
-  void UpdateInputFileIdx();
-
-
-  void WriteInputToFileOrDie(const string& file, const vector<value_t>& input);
   int num_iters_;
+
+  void WriteInputToFileOrDie(const char *file, const vector<value_t>& input);
   void WriteCoverageToFileOrDie(const string& file);
   void LaunchProgram(const vector<value_t>& inputs);
   const int max_iters_;
@@ -255,7 +238,6 @@ SymbolicExecution run_ex;
   struct sockaddr_un sock_;
   int sockd_;
   */
-
   // void WriteCoverageToFileOrDie(const string& file);
   // void LaunchProgram(const vector<value_t>& inputs);
 };
@@ -296,13 +278,13 @@ public:
 //
 // };
 
-class RandomCSSearch : public Search {
+class RandomMDSearch : public Search {
  public:
-   RandomCSSearch(const string& program, int max_iterations)
+   RandomMDSearch(const string& program, int max_iterations)
      : Search(program, max_iterations) { }
 
-  ~RandomCSSearch() {}
-  // virtual ~RandomCSSearch();
+  ~RandomMDSearch() {}
+  // virtual ~RandomMDSearch();
   virtual void Run();
   // void Run2();
   // void AssignEnergy(EXContext &c);
@@ -352,27 +334,6 @@ class RandomInputSearch : public Search {
 };
 
 
-class RandomESSearch : public Search {
- public:
-  RandomESSearch(const string& program, int max_iterations);
-  virtual ~RandomESSearch();
-
-  virtual void Run();
-
- private:
-  //SymbolicExecution ex_;
-  vector<SymbolicExecution> v_ex_;
-
-  void SolveUncoveredBranches(size_t i, int depth,
-                              const SymbolicExecution& prev_ex);
-
-  bool SolveRandomBranch(vector<value_t>* next_input, size_t* idx);
-};
-
-
-
-
-
 class UniformRandomSearch : public Search {
  public:
   UniformRandomSearch(const string& program, int max_iterations, size_t max_depth);
@@ -381,12 +342,12 @@ class UniformRandomSearch : public Search {
   virtual void Run();
 
  private:
-  // SymbolicExecution prev_ex_;
-  // SymbolicExecution cur_ex_;
+  SymbolicExecution prev_ex_;
+  SymbolicExecution cur_ex_;
 
   size_t max_depth_;
 
-  // void DoUniformRandomPath();
+  void DoUniformRandomPath();
 };
 
 
@@ -502,10 +463,10 @@ class CfgHeuristicSearch : public Search {
 
 
 
-class CfgHeuristicCSSearch : public Search {
+class CfgHeuristicMDSearch : public Search {
  public:
-  CfgHeuristicCSSearch(const string& program, int max_iterations);
-  virtual ~CfgHeuristicCSSearch();
+  CfgHeuristicMDSearch(const string& program, int max_iterations);
+  virtual ~CfgHeuristicMDSearch();
   virtual void Run();
 protected:
   SymbolicExecution *cur_ex_;

@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <getopt.h>
-// #include <unistd.h>
+#include <unistd.h>
 
 #include "run_crest/concolic_search.h"
 
@@ -30,7 +30,7 @@ void print_help() {
 struct option long_options[] =
 {
     {"random_input", no_argument, 0, 0},
-    {"dfs", optional_argument, 0, 'd'},
+    {"dfs", optional_argument, 0, 0},
     {"cfg", no_argument, 0, 0},
     {"md_cfg", optional_argument, 0, 0},
     {"random", no_argument, 0, 0},
@@ -49,12 +49,11 @@ int main(int argc, char* argv[]) {
   gettimeofday(&tv, NULL);
   srand((tv.tv_sec * 1000000) + tv.tv_usec);
 
-  char *depth = 0;
-  char *time_out = "1000000";
+  const char *time_out = "1000000";
 
   string search_type = "";
-  string log_file_name = "";
-  string summary_file_name = "";
+  char* log_file_name = 0;
+  char* summary_file_name = 0;
 
   if (argc < 4) {
     print_help();
@@ -88,7 +87,6 @@ int main(int argc, char* argv[]) {
           fprintf(stderr, "log : %s\n", optarg);
           log_file_name = optarg;
         } else {
-          fprintf(stderr, "Enter log file name\n");
           return 1;
         }
         break;
@@ -96,22 +94,7 @@ int main(int argc, char* argv[]) {
         if (optarg) {
             time_out = optarg;
         } else {
-            fprintf(stderr, "Enter time out (in secs)\n");
             return 1;
-        }
-        break;
-      case 'd':
-        // see https://stackoverflow.com/questions/1052746/getopt-does-not-parse-optional-arguments-to-parameters
-        search_type = "dfs";
-        if (!optarg
-            && optind < argc
-            && NULL != argv[optind]
-            && '\0' != argv[optind][0]
-            && '-' != argv[optind][0]) {
-            depth = argv[optind++];
-            fprintf(stderr, "depth : %s\n",depth);
-        } else {
-          depth = 0;
         }
         break;
       default: // not correct inputs
@@ -124,52 +107,61 @@ int main(int argc, char* argv[]) {
 
   crest::Search* strategy;
 
-  // system("rm si_time");
-  bool is_run_directory_option = false;
 
   fprintf(stderr, "program : [%s]\n", prog);
-
-  fprintf(stderr, "num_iters : [%d]\n", num_iters);
-
   fprintf(stderr, "search_type : [%s]\n", search_type.c_str());
-  fprintf(stderr, "argc %d\n",argc);
-  fprintf(stderr, "argv[%d] : %s\n",optind, argv[optind]);
-  exit(0);
+  fprintf(stderr, "max testcase number : [%d]\n", num_iters);
+  fprintf(stderr, "timeout : %s\n", time_out);
+  fprintf(stderr, "write log to '%s'\n",log_file_name);
+  fprintf(stderr, "write summary to '%s'\n",summary_file_name);
 
-  system("rm -r inputs");
-  system("cp -r seeds inputs");
-  system("cp seeds/input1 input");
+
+  // set initial input
+  struct stat buffer;
+  if(stat("initial_input", &buffer) != 0) {
+    fprintf(stderr, "initial_input file does not exist! exit.");
+    return 1;
+  }
+
+  system("cp initial_input input");
+
+  // remove all summaries and logs ( for conveinence...)
   system("rm summary* log*");
 
-  if (search_type == "-random") {
+  if (search_type == "random") {
     strategy = new crest::RandomSearch(prog, num_iters);
-  } else if (search_type == "-cs_random") {
-    strategy = new crest::RandomCSSearch(prog, num_iters);
-  } else if (search_type == "-dfs") {
+  } else if (search_type == "md_random") {
+    strategy = new crest::RandomMDSearch(prog, num_iters);
+  } else if (search_type == "dfs") {
     if (argc == 4) {
       strategy = new crest::BoundedDepthFirstSearch(prog, num_iters, 1000000);
     } else {
       strategy = new crest::BoundedDepthFirstSearch(prog, num_iters, atoi(argv[4]));
     }
-  } else if (search_type == "-cs_cfg") {
-    strategy = new crest::CfgHeuristicCSSearch(prog, num_iters);
-  } else if (search_type == "-cfg") {
+  } else if (search_type == "md_cfg") {
+    strategy = new crest::CfgHeuristicMDSearch(prog, num_iters);
+  } else if (search_type == "cfg") {
     strategy = new crest::CfgHeuristicSearch(prog, num_iters);
-  } else if (search_type == "-cfg_baseline") {
+  } else if (search_type == "cfg_baseline") {
     strategy = new crest::CfgBaselineSearch(prog, num_iters);
-  } else if (search_type == "-random_input") {
+  } else if (search_type == "random_input") {
     strategy = new crest::RandomInputSearch(prog, num_iters);
-  } else if (search_type == "-hybrid") {
+  } else if (search_type == "hybrid") {
     strategy = new crest::HybridSearch(prog, num_iters, 100);
-  } else if (search_type == "-uniform_random") {
+  } else if (search_type == "uniform_random") {
     if (argc == 4) {
       strategy = new crest::UniformRandomSearch(prog, num_iters, 100000000);
     } else {
       strategy = new crest::UniformRandomSearch(prog, num_iters, atoi(argv[4]));
     }
+  } else {
+    fprintf(stderr, "There is no search strategy : %s\n", search_type.c_str());
+    exit(1);
   }
 
-  // strategy->SetTimeOut(execution_time);
+  strategy->SetSummaryFileName(summary_file_name);
+  strategy->SetLogFileName(log_file_name);
+  strategy->SetTimeOut(atoi(time_out));
   strategy->Run();
 
   delete strategy;
