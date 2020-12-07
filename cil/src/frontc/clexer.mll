@@ -110,7 +110,7 @@ let dbgToken (t: token) =
 (*
 ** Keyword hashtable
 *)
-let lexicon = H.create 211
+let lexicon = H.create 218
 let init_lexicon _ =
   H.clear lexicon;
   List.iter 
@@ -218,6 +218,16 @@ let init_lexicon _ =
                          THREAD loc
                        else 
                          IDENT ("__thread", loc));
+      (* support glibc version < 2.27 *)
+      ("_Float16", fun loc -> FLOAT loc);
+      ("_Float32", fun loc -> FLOAT loc);
+      ("_Float64", fun loc -> LDOUBLE loc);
+      ("_Float128", fun loc -> LDOUBLE loc);
+      ("_Float32x", fun loc -> DOUBLE loc);
+      ("_Float64x", fun loc -> LDOUBLE loc);
+      (* glibc version < 2.27 douse not supports _Float128*,
+       * but we force _Float128x into Long Double *)
+      ("_Float128x", fun loc -> LDOUBLE loc);
     ]
 
 (* Mark an identifier as a type name. The old mapping is preserved and will 

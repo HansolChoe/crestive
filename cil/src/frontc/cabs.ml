@@ -63,6 +63,7 @@ type typeSpecifier = (* Merge all specifiers into one type *)
   | Tint64
   | Tfloat
   | Tdouble
+  | Tldouble
   | Tsigned
   | Tsizet    (* used temporarily to translate offsetof() *)
   | Tunsigned

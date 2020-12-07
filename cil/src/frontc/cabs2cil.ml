@@ -2301,7 +2301,8 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
       | A.Tint64 -> 7
       | A.Tfloat -> 8
       | A.Tdouble -> 9
-      | _ -> 10 (* There should be at most one of the others *)
+      | A.Tldouble -> 10
+      | _ -> 11 (* There should be at most one of the others *)
     in
     List.stable_sort (fun ts1 ts2 -> compare (order ts1) (order ts2)) tspecs' 
   in
@@ -2372,6 +2373,7 @@ let rec doSpecList (suggestedAnonName: string) (* This string will be part of
     | [A.Tdouble] -> TFloat(FDouble, [])
 
     | [A.Tlong; A.Tdouble] -> TFloat(FLongDouble, [])
+    | [A.Tldouble] -> TFloat(FLongDouble, [])
 
      (* Now the other type specifiers *)
     | [A.Tnamed n] -> begin

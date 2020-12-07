@@ -481,6 +481,7 @@ bool CfgHeuristicMDSearch::UpdateCoverage(const SymbolicExecution& ex,
      num_unsat_,
      Q.size(),
      context.energy);
+    fclose(f);
   }
 
   if (summary_file_name_ != 0) {
